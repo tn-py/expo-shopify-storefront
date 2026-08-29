@@ -7,7 +7,9 @@ node_modules/
 .expo/
 dist/
 web-build/
-expo-env.d.ts
+# expo-env.d.ts is committed on purpose: it carries the `expo/types` reference
+# that types `process.env`, so `tsc` (and CI) works on a fresh checkout without
+# first running a dev server. Expo regenerates it with identical content.
 
 # Native
 .kotlin/
