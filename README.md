@@ -126,6 +126,27 @@ npm start          # expo start --dev-client
 
 Open the dev client on the device/simulator and connect to Metro.
 
+### 5. Optional integrations
+
+Each is off until you set its env var(s); the app runs fine without any of them.
+
+| Integration | Set in `.env` | Needs a rebuild? | Guide |
+| --- | --- | --- | --- |
+| **Customer accounts** — sign-in, orders, addresses | `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID`, `_API_URL` | no | [customer-accounts.md](docs/customer-accounts.md) |
+| **Universal / App Links** — `https://` links open the app | `EXPO_PUBLIC_APP_UNIVERSAL_LINK_DOMAINS` | yes | [deep-links.md](docs/deep-links.md) |
+| **Analytics** — PostHog | `EXPO_PUBLIC_POSTHOG_KEY`, `_HOST` | no | — |
+| **Push notifications** — OneSignal | `EXPO_PUBLIC_ONESIGNAL_APP_ID`, `EXPO_PUBLIC_ONESIGNAL_IOS_MODE` | yes | [push-notifications.md](docs/push-notifications.md) |
+
+**Push notifications** depends on some external setup — in short:
+
+1. Create an app at [onesignal.com](https://onesignal.com); copy its **App ID** into `EXPO_PUBLIC_ONESIGNAL_APP_ID`.
+2. **Android:** upload a Firebase **service-account JSON** under OneSignal → Settings → Push & In-App → Google Android (FCM).
+3. **iOS:** add the **Apple iOS (APNs)** platform in OneSignal (a `.p8` auth key), and set `EXPO_PUBLIC_ONESIGNAL_IOS_MODE` (`development` for dev / TestFlight, `production` for the App Store). Requires an Apple Developer account.
+4. Rebuild the dev client (`eas build --profile development`) — this adds native code.
+5. In the app, the **Account** tab has a row that requests notification permission.
+
+Full walkthrough — identity linking to the Shopify customer, deep-linked taps, sending a test push — is in [docs/push-notifications.md](docs/push-notifications.md).
+
 ## Project structure
 
 ```
