@@ -40,6 +40,9 @@ npm start
   / Universal Links ready when you add your domain.
 - **Analytics** *(optional)* — PostHog wrapper; `product_viewed`, `search`,
   `add_to_cart`, `purchase`, `login`. No-ops with no key.
+- **Push notifications** *(optional)* — OneSignal; signed-in shoppers linked to
+  their Shopify customer id, notification taps deep-linked to the right screen.
+  No-ops with no app id.
 - **Theming** — light / dark / system, accent colours from `.env`, Montserrat
   type scale, shared design tokens.
 - **DX** — TypeScript strict, Expo Router typed routes, React Compiler,
@@ -61,6 +64,7 @@ _Add screenshots to `docs/media/` and link them here (see `docs/media/README.md`
 | Server state | `@tanstack/react-query` |
 | Storage | `@react-native-async-storage/async-storage`, `expo-secure-store` |
 | Analytics | `posthog-react-native` (optional) |
+| Push | `react-native-onesignal` + `onesignal-expo-plugin` (optional) |
 | Builds | EAS Build (iOS + Android) |
 
 ## Getting started
@@ -99,6 +103,7 @@ Full variable reference is in [`.env.example`](.env.example); the highlights:
 | `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` / `_API_URL` | Enable customer accounts | *(off)* |
 | `EXPO_PUBLIC_SUPPORT_EMAIL` / `EXPO_PUBLIC_ABOUT_URL` | Account-screen links | *(hidden)* |
 | `EXPO_PUBLIC_POSTHOG_KEY` / `_HOST` | Analytics | *(off)* |
+| `EXPO_PUBLIC_ONESIGNAL_APP_ID` | Push notifications (OneSignal) | *(off)* |
 
 `EXPO_PUBLIC_*` values are inlined into the JS bundle. The Storefront API token
 and Customer Account client id are **public** credentials — that's expected and
@@ -127,7 +132,7 @@ Open the dev client on the device/simulator and connect to Metro.
 app.config.ts            Native config, fully driven by .env
 src/
   app/                    Expo Router routes
-    _layout.tsx           Providers: QueryClient · CheckoutSheet · Auth · Cart · theme · Stack
+    _layout.tsx           Providers: QueryClient · CheckoutSheet · Auth · Push · Cart · theme · Stack
     (tabs)/               Home · Shop · Search · Cart · Account
     product/[handle].tsx  PDP — carousel, variant picker, add to cart
     collection/[handle].tsx  grid · sort · infinite scroll
@@ -144,9 +149,10 @@ src/
     customer.ts           orders / order / addresses queries + hooks
     env.ts / types.ts
   components/             ProductCard · ScreenState · SetupRequired · themed primitives
+  notifications/          OneSignal push: init, identity sync, deep-linked taps
   constants/theme.ts      Design tokens (colours from .env)
-  hooks/ · lib/           theme resolution · analytics · formatting · query client
-docs/                     shopify-setup · deep-links · customer-accounts · well-known/
+  hooks/ · lib/           theme resolution · analytics · deep-link normaliser · query client
+docs/                     shopify-setup · deep-links · customer-accounts · push-notifications · well-known/
 ```
 
 ## Guides
@@ -154,6 +160,7 @@ docs/                     shopify-setup · deep-links · customer-accounts · we
 - [Shopify setup](docs/shopify-setup.md) — API token, scopes, publication, checkout test mode
 - [Customer accounts](docs/customer-accounts.md) — Customer Account API + callback URI
 - [Deep links & universal links](docs/deep-links.md) — schemes, App Links, `.well-known` files
+- [Push notifications](docs/push-notifications.md) — OneSignal setup, identity, deep-linked taps
 
 ## Building for release
 
@@ -179,9 +186,8 @@ CI runs the first three on every push and PR (`.github/workflows/ci.yml`).
 
 ## Roadmap
 
-- Push notifications (`expo-notifications` device registration + a Shopify webhook
-  → Expo Push API sender). The plugin is configured; registration/sender aren't
-  built.
+- Wishlist / saved items, product reviews, and richer collection filters are
+  natural next additions — PRs welcome.
 
 ## Contributing
 

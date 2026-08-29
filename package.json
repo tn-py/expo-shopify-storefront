@@ -16,7 +16,9 @@
     "ecommerce",
     "template",
     "checkout-sheet-kit",
-    "expo-router"
+    "expo-router",
+    "push-notifications",
+    "onesignal"
   ],
   "dependencies": {
     "@expo-google-fonts/montserrat": "^0.4.2",
@@ -51,6 +53,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
+    "react-native-onesignal": "^5.5.8",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
@@ -62,6 +65,7 @@
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "onesignal-expo-plugin": "^2.7.1",
     "typescript": "~6.0.3"
   },
   "scripts": {

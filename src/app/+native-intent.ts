@@ -1,9 +1,12 @@
+import { storefrontPathToRoute, urlToPath } from '@/lib/deep-link';
+
 /**
  * Rewrites inbound deep links / universal links to app routes.
  *
  * Shopify storefronts use plural paths (`/products/<handle>`,
  * `/collections/<handle>`); the app routes are singular (`/product/<handle>`,
- * `/collection/<handle>`). Anything not matched here is returned untouched.
+ * `/collection/<handle>`). Anything not matched is returned untouched so Expo
+ * Router can resolve it as-is. Shared with the push handler via `@/lib/deep-link`.
  */
 export function redirectSystemPath({
   path,
@@ -16,29 +19,8 @@ export function redirectSystemPath({
     return path;
   }
 
-  try {
-    let p = path;
+  const normalized = urlToPath(path);
+  if (!normalized) return path;
 
-    if (/^https?:\/\//i.test(p)) {
-      p = new URL(p).pathname;
-    } else if (/^[a-z][a-z0-9.+-]*:\/\//i.test(p)) {
-      // Custom scheme (shopstore://…, shop.<id>.app://…) -> path only.
-      p = p.replace(/^[a-z][a-z0-9.+-]*:\/\/[^/]*/i, '');
-    }
-    if (!p) return path;
-    if (!p.startsWith('/')) p = `/${p}`;
-
-    const product = p.match(/^\/products\/([^/?#]+)/);
-    if (product) return `/product/${product[1]}`;
-
-    const collection = p.match(/^\/collections\/([^/?#]+)/);
-    if (collection) return `/collection/${collection[1]}`;
-
-    if (/^\/(pages\/)?search(\b|\/|$)/.test(p)) return '/search';
-
-    // Not a storefront-shaped URL — let Expo Router resolve it as-is.
-    return path;
-  } catch {
-    return path;
-  }
+  return storefrontPathToRoute(normalized) ?? path;
 }

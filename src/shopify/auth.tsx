@@ -13,6 +13,7 @@ import {
 } from 'react';
 
 import { identify, resetAnalytics, track } from '@/lib/analytics';
+import { identifyPushUser, resetPushUser } from '@/notifications/onesignal';
 import { ShopifyEnv, isCustomerAccountConfigured } from './env';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -28,6 +29,8 @@ interface StoredTokens {
 }
 
 export interface CustomerProfile {
+  /** Shopify customer GID — the stable id to key external systems on. */
+  id: string | null;
   firstName: string | null;
   lastName: string | null;
   emailAddress: string | null;
@@ -76,7 +79,7 @@ function toStored(r: AuthSession.TokenResponse): StoredTokens {
   };
 }
 
-const PROFILE_QUERY = `query { customer { firstName lastName emailAddress { emailAddress } } }`;
+const PROFILE_QUERY = `query { customer { id firstName lastName emailAddress { emailAddress } } }`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [tokens, setTokens] = useState<StoredTokens | null>(null);
@@ -142,12 +145,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const raw = json?.data?.customer;
         if (raw && !cancelled) {
           const c: CustomerProfile = {
+            id: raw.id ?? null,
             firstName: raw.firstName ?? null,
             lastName: raw.lastName ?? null,
             emailAddress: raw.emailAddress?.emailAddress ?? null,
           };
           setCustomer(c);
           if (c.emailAddress) identify(c.emailAddress, { email: c.emailAddress });
+          if (c.id ?? c.emailAddress) {
+            identifyPushUser((c.id ?? c.emailAddress)!, c.emailAddress);
+          }
         }
       } catch {
         // non-fatal — profile just stays null
@@ -194,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokens(null);
     setCustomer(null);
     resetAnalytics();
+    resetPushUser();
   }, []);
 
   const value = useMemo<AuthContextValue>(
