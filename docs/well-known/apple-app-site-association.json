@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["<APPLE_TEAM_ID>.<APP_BUNDLE_ID>"],
+        "components": [
+          { "/": "/products/*", "comment": "Product pages" },
+          { "/": "/collections/*", "comment": "Collection pages" },
+          { "/": "/", "comment": "Home" }
+        ]
+      }
+    ]
+  }
+}
