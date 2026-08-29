@@ -48,6 +48,21 @@ const shopId = (env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL ?? '').match(
 const schemes = [APP_SCHEME];
 if (shopId) schemes.push(`shop.${shopId}.app`);
 
+/**
+ * Push notifications via OneSignal — only wired into the native build when
+ * `EXPO_PUBLIC_ONESIGNAL_APP_ID` is set (see docs/push-notifications.md).
+ * `mode` selects the iOS APNs environment: `development` for dev-client /
+ * simulator builds, `production` for TestFlight / App Store.
+ */
+const onesignalAppId = pick(env.EXPO_PUBLIC_ONESIGNAL_APP_ID, '');
+const onesignalMode =
+  pick(env.EXPO_PUBLIC_ONESIGNAL_IOS_MODE, 'development') === 'production'
+    ? 'production'
+    : 'development';
+const onesignalPlugin: NonNullable<ExpoConfig['plugins']> = onesignalAppId
+  ? [['onesignal-expo-plugin', { mode: onesignalMode }]]
+  : [];
+
 export default (): ExpoConfig => ({
   name: APP_NAME,
   slug: APP_SLUG,
@@ -104,6 +119,7 @@ export default (): ExpoConfig => ({
     'expo-tracking-transparency',
     'expo-localization',
     ['expo-notifications', { color: BRAND_PRIMARY }],
+    ...onesignalPlugin,
   ],
   experiments: {
     typedRoutes: true,

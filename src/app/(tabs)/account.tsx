@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 import { Link } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,11 @@ import { ThemedView } from '@/components/themed-view';
 import { LoadingState } from '@/components/screen-state';
 import { Brand, Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  getPushPermission,
+  isPushConfigured,
+  requestPushPermission,
+} from '@/notifications/onesignal';
 import { useAuth } from '@/shopify/auth';
 import { useShop } from '@/shopify/hooks';
 
@@ -79,9 +84,10 @@ export default function AccountScreen() {
           </View>
         )}
 
-        {(SUPPORT_EMAIL || ABOUT_URL) && (
+        {(SUPPORT_EMAIL || ABOUT_URL || isPushConfigured) && (
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
         )}
+        {isPushConfigured ? <NotificationsRow /> : null}
         {SUPPORT_EMAIL ? (
           <Pressable
             onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
@@ -103,6 +109,42 @@ export default function AccountScreen() {
         ) : null}
       </ScrollView>
     </ThemedView>
+  );
+}
+
+function NotificationsRow() {
+  const [granted, setGranted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getPushPermission().then((v) => {
+      if (alive) setGranted(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const enable = async () => {
+    const ok = await requestPushPermission();
+    setGranted(ok);
+    if (!ok) {
+      Alert.alert(
+        'Notifications',
+        'Turn on notifications for this app in your device Settings to get order updates.',
+      );
+    }
+  };
+
+  return (
+    <Pressable onPress={enable} disabled={granted === true} style={styles.menuItem}>
+      <ThemedText>Push notifications</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {granted === true
+          ? 'On — order updates and offers'
+          : 'Tap to turn on order updates and offers'}
+      </ThemedText>
+    </Pressable>
   );
 }
 
