@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@import 'uniwind';
+@import 'heroui-native/styles';
+
+@layer theme {
+  @variant light {
+    --background: #ffffff;
+    --foreground: #1b1b1b;
+    --muted: #f4f4f5;
+    --muted-foreground: #6b7280;
+    --border: #e4e4e7;
+    --accent: #0a7ea4;
+    --accent-foreground: #ffffff;
+    --sale: #d1453b;
+  }
+
+  @variant dark {
+    --background: #0e1116;
+    --foreground: #f4f5f7;
+    --muted: #1a1e26;
+    --muted-foreground: #9aa2ad;
+    --border: #282e3a;
+    --accent: #0a7ea4;
+    --accent-foreground: #ffffff;
+    --sale: #d1453b;
+  }
+}
+
+@theme inline {
+  --color-sale: var(--sale);
+  --color-sale-foreground: var(--accent-foreground);
+}

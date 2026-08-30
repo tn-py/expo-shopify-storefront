@@ -1,11 +1,5 @@
-import {
-  Montserrat_400Regular,
-  Montserrat_500Medium,
-  Montserrat_600SemiBold,
-  Montserrat_700Bold,
-  useFonts,
-} from '@expo-google-fonts/montserrat';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { HeroUINativeProvider } from 'heroui-native/provider';
 import {
   ColorScheme,
   ShopifyCheckoutSheetProvider,
@@ -17,9 +11,7 @@ import {
   ThemeProvider,
   type Theme,
 } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -30,8 +22,11 @@ import { AuthProvider } from '@/shopify/auth';
 import { CartProvider } from '@/shopify/cart';
 import { CheckoutEvents } from '@/shopify/checkout';
 import { queryClient } from '@/lib/query-client';
+import { initializeTheme } from '@/theme/initialize-theme';
 
-SplashScreen.preventAutoHideAsync();
+import '../../global.css';
+
+initializeTheme();
 
 function makeNavTheme(scheme: 'light' | 'dark'): Theme {
   const c = Colors[scheme];
@@ -66,59 +61,48 @@ export default function RootLayout() {
   const scheme = useResolvedScheme();
   const theme = Colors[scheme];
 
-  const [fontsLoaded] = useFonts({
-    Montserrat_400Regular,
-    Montserrat_500Medium,
-    Montserrat_600SemiBold,
-    Montserrat_700Bold,
-  });
-
-  const onLayout = useCallback(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
-  }, [fontsLoaded]);
-
-  if (!fontsLoaded) return null;
-
   return (
-    <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayout}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <ShopifyCheckoutSheetProvider
-            configuration={{ colorScheme: checkoutColorScheme, preloading: true }}>
-            <AuthProvider>
-              <PushProvider>
-                <CartProvider>
-                  <ThemeProvider value={makeNavTheme(scheme)}>
-                    <CheckoutEvents />
-                    <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-                    <Stack
-                      screenOptions={{
-                        headerBackButtonDisplayMode: 'minimal',
-                        headerTintColor: theme.primary,
-                        headerTitleStyle: {
-                          fontFamily: Fonts.semibold,
-                          color: theme.text,
-                        },
-                        headerShadowVisible: false,
-                        contentStyle: { backgroundColor: theme.background },
-                      }}>
-                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                      <Stack.Screen name="product/[handle]" options={{ title: '' }} />
-                      <Stack.Screen name="collection/[handle]" options={{ title: '' }} />
-                      <Stack.Screen name="account/orders" options={{ title: 'Orders' }} />
-                      <Stack.Screen name="account/order/[id]" options={{ title: 'Order' }} />
-                      <Stack.Screen name="account/addresses" options={{ title: 'Addresses' }} />
-                      <Stack.Screen
-                        name="order-confirmed"
-                        options={{ headerShown: false, presentation: 'fullScreenModal' }}
-                      />
-                    </Stack>
-                  </ThemeProvider>
-                </CartProvider>
-              </PushProvider>
-            </AuthProvider>
-          </ShopifyCheckoutSheetProvider>
-        </QueryClientProvider>
+        <HeroUINativeProvider>
+          <QueryClientProvider client={queryClient}>
+            <ShopifyCheckoutSheetProvider
+              configuration={{ colorScheme: checkoutColorScheme, preloading: true }}>
+              <AuthProvider>
+                <PushProvider>
+                  <CartProvider>
+                    <ThemeProvider value={makeNavTheme(scheme)}>
+                      <CheckoutEvents />
+                      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+                      <Stack
+                        screenOptions={{
+                          headerBackButtonDisplayMode: 'minimal',
+                          headerTintColor: theme.primary,
+                          headerTitleStyle: {
+                            fontFamily: Fonts.semibold,
+                            color: theme.text,
+                          },
+                          headerShadowVisible: false,
+                          contentStyle: { backgroundColor: theme.background },
+                        }}>
+                        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                        <Stack.Screen name="product/[handle]" options={{ title: '' }} />
+                        <Stack.Screen name="collection/[handle]" options={{ title: '' }} />
+                        <Stack.Screen name="account/orders" options={{ title: 'Orders' }} />
+                        <Stack.Screen name="account/order/[id]" options={{ title: 'Order' }} />
+                        <Stack.Screen name="account/addresses" options={{ title: 'Addresses' }} />
+                        <Stack.Screen
+                          name="order-confirmed"
+                          options={{ headerShown: false, presentation: 'fullScreenModal' }}
+                        />
+                      </Stack>
+                    </ThemeProvider>
+                  </CartProvider>
+                </PushProvider>
+              </AuthProvider>
+            </ShopifyCheckoutSheetProvider>
+          </QueryClientProvider>
+        </HeroUINativeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

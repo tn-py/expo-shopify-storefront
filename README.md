@@ -43,8 +43,8 @@ npm start
 - **Push notifications** *(optional)* — OneSignal; signed-in shoppers linked to
   their Shopify customer id, notification taps deep-linked to the right screen.
   No-ops with no app id.
-- **Theming** — light / dark / system, accent colours from `.env`, Montserrat
-  type scale, shared design tokens.
+- **Native UI foundation** — HeroUI Native + Uniwind, app-owned commerce
+  primitives, platform system typography, and light / dark / system theming.
 - **DX** — TypeScript strict, Expo Router typed routes, React Compiler,
   React Query, ESLint, `expo-doctor`, CI workflow.
 
@@ -62,6 +62,7 @@ _Add screenshots to `docs/media/` and link them here (see `docs/media/README.md`
 | Checkout | `@shopify/checkout-sheet-kit` |
 | Accounts | Shopify Customer Account API + `expo-auth-session` (PKCE) |
 | Server state | `@tanstack/react-query` |
+| UI | HeroUI Native + Uniwind, consumed through app-owned primitives |
 | Storage | `@react-native-async-storage/async-storage`, `expo-secure-store` |
 | Analytics | `posthog-react-native` (optional) |
 | Push | `react-native-onesignal` + `onesignal-expo-plugin` (optional) |
@@ -169,7 +170,7 @@ src/
     auth.tsx              Customer Account API OAuth (PKCE)
     customer.ts           orders / order / addresses queries + hooks
     env.ts / types.ts
-  components/             ProductCard · ScreenState · SetupRequired · themed primitives
+  components/             ProductCard · ScreenState · SetupRequired · ui commerce primitives
   notifications/          OneSignal push: init, identity sync, deep-linked taps
   constants/theme.ts      Design tokens (colours from .env)
   hooks/ · lib/           theme resolution · analytics · deep-link normaliser · query client
@@ -199,8 +200,10 @@ Version and build numbers auto-increment on the `production` profile
 ```sh
 npm run typecheck        # tsc --noEmit
 npm run lint             # expo lint
+npm test                 # Jest Expo + React Native Testing Library
 npm run doctor           # expo-doctor
 npx expo export --platform android   # full bundle smoke test
+npx expo export --platform ios       # full bundle smoke test
 ```
 
 CI runs the first three on every push and PR (`.github/workflows/ci.yml`).

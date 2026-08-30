@@ -1,8 +1,7 @@
 /**
  * Design tokens. The accent colours come from `EXPO_PUBLIC_BRAND_*` env vars so
  * the template can be rebranded without touching code; everything else is a
- * neutral light/dark scale. Typography is Montserrat (loaded in
- * `src/app/_layout.tsx`) — swap the font package there to change it.
+ * neutral light/dark scale. Typography uses the platform's system font stack.
  */
 
 import { Platform } from 'react-native';
@@ -58,12 +57,14 @@ export const AppColorScheme = pick(
   'system',
 ).toLowerCase();
 
-/** Font families registered in app/_layout.tsx via @expo-google-fonts/montserrat. */
+const systemFont = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }) ?? 'System';
+
+/** Native system typography keeps platform rendering and Dynamic Type behavior intact. */
 export const Fonts = {
-  regular: 'Montserrat_400Regular',
-  medium: 'Montserrat_500Medium',
-  semibold: 'Montserrat_600SemiBold',
-  bold: 'Montserrat_700Bold',
+  regular: systemFont,
+  medium: systemFont,
+  semibold: systemFont,
+  bold: systemFont,
   mono: Platform.select({ ios: 'ui-monospace', default: 'monospace' }),
 } as const;
 

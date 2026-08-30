@@ -68,6 +68,7 @@ export default (): ExpoConfig => ({
   slug: APP_SLUG,
   version: '1.0.0',
   orientation: 'portrait',
+  platforms: ['ios', 'android'],
   icon: './assets/images/icon.png',
   scheme: schemes,
   userInterfaceStyle,
@@ -100,10 +101,6 @@ export default (): ExpoConfig => ({
         }
       : {}),
     permissions: ['com.google.android.gms.permission.AD_ID'],
-  },
-  web: {
-    output: 'static',
-    favicon: './assets/images/favicon.png',
   },
   plugins: [
     'expo-router',
