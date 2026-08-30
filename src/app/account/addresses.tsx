@@ -7,6 +7,7 @@ import { CustomerAuthGate, type AuthenticatedCustomerAccess } from '@/components
 import { AppButton, AppSurface, AppText, StateView, StatusBadge } from '@/components/ui';
 import { safeCustomerAccountManagementUrl } from '@/config/account-links';
 import { Spacing } from '@/constants/theme';
+import { usePaginationLock } from '@/hooks/use-pagination-lock';
 import { ShopifyEnv } from '@/shopify/env';
 import { useAddresses, type CustomerAddress } from '@/shopify/customer';
 
@@ -20,6 +21,11 @@ export default function AddressesScreen() {
 
 function AuthenticatedAddresses({ access }: { access: AuthenticatedCustomerAccess }) {
   const query = useAddresses(access.getAccessToken, access.customerSessionKey);
+  const loadNextPage = usePaginationLock({
+    hasNextPage: Boolean(query.hasNextPage),
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+  });
   const pages = query.data?.pages;
   const addresses = useMemo(
     () => pages?.flatMap((page) => page.customer.addresses.edges.map((edge) => edge.node)) ?? [],
@@ -50,9 +56,7 @@ function AuthenticatedAddresses({ access }: { access: AuthenticatedCustomerAcces
         onRefresh={query.refetch}
         refreshing={query.isRefetching && !query.isFetchingNextPage}
         onEndReachedThreshold={0.4}
-        onEndReached={() => {
-          if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
-        }}
+        onEndReached={() => void loadNextPage()}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <AppText tone="textSecondary">
@@ -72,7 +76,7 @@ function AuthenticatedAddresses({ access }: { access: AuthenticatedCustomerAcces
               <AppButton
                 label="Retry loading more addresses"
                 variant="secondary"
-                onPress={() => void query.fetchNextPage()}
+                onPress={() => void loadNextPage()}
               />
             ) : null}
             {query.isFetchingNextPage ? <AppText tone="textSecondary">Loading more…</AppText> : null}

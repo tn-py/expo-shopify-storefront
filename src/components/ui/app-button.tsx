@@ -1,13 +1,26 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, type PressableProps } from 'react-native';
+import { Button } from 'heroui-native/button';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  type PressableProps,
+} from 'react-native';
 
 import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export type AppButtonProps = Omit<PressableProps, 'children' | 'style'> & {
+export type AppButtonProps = Omit<PressableProps, 'children'> & {
   label: string;
   variant?: 'primary' | 'secondary' | 'tertiary' | 'danger';
   loading?: boolean;
 };
+
+const heroVariant = {
+  primary: 'primary',
+  secondary: 'secondary',
+  tertiary: 'tertiary',
+  danger: 'danger',
+} as const;
 
 export function AppButton({
   label,
@@ -15,28 +28,63 @@ export function AppButton({
   loading = false,
   disabled = false,
   accessibilityLabel,
+  accessibilityRole: _accessibilityRole,
+  accessibilityState,
+  role: _role,
+  'aria-busy': _ariaBusy,
+  'aria-disabled': _ariaDisabled,
+  className,
+  style,
+  onPressIn,
+  onPressOut,
+  onHoverIn,
+  onHoverOut,
   ...props
 }: AppButtonProps) {
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const theme = useTheme();
-  const isDisabled = disabled || loading;
-  const isSolid = variant === 'primary' || variant === 'danger';
-  const backgroundColor =
-    variant === 'danger' ? theme.sale : variant === 'primary' ? theme.primary : theme.backgroundElement;
-  const color = isSolid ? theme.onPrimary : theme.text;
+  const isDisabled = Boolean(disabled || loading);
+  const indicatorColor = variant === 'primary' || variant === 'danger'
+    ? theme.onPrimary
+    : theme.text;
+  const callerStyle = typeof style === 'function' ? style({ pressed, hovered }) : style;
 
   return (
-    <Pressable
+    <Button
+      {...props}
+      variant={heroVariant[variant]}
+      isDisabled={isDisabled}
+      role="button"
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled: isDisabled, busy: loading }}
-      disabled={isDisabled}
-      style={({ pressed }) => [
-        styles.button,
-        { backgroundColor, opacity: isDisabled ? 0.5 : pressed ? 0.82 : 1 },
-      ]}
-      {...props}>
-      {loading ? <ActivityIndicator color={color} /> : <Text style={[styles.label, { color }]}>{label}</Text>}
-    </Pressable>
+      accessibilityState={{ ...accessibilityState, disabled: isDisabled, busy: loading }}
+      aria-disabled={isDisabled}
+      aria-busy={loading}
+      className={[className, 'min-h-11 rounded-xl px-4'].filter(Boolean).join(' ')}
+      style={[callerStyle, styles.button]}
+      onPressIn={(event) => {
+        setPressed(true);
+        onPressIn?.(event);
+      }}
+      onPressOut={(event) => {
+        setPressed(false);
+        onPressOut?.(event);
+      }}
+      onHoverIn={(event) => {
+        setHovered(true);
+        onHoverIn?.(event);
+      }}
+      onHoverOut={(event) => {
+        setHovered(false);
+        onHoverOut?.(event);
+      }}>
+      {loading ? (
+        <ActivityIndicator color={indicatorColor} />
+      ) : (
+        <Button.Label style={styles.label}>{label}</Button.Label>
+      )}
+    </Button>
   );
 }
 

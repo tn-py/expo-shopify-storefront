@@ -1,40 +1,46 @@
+import { Accordion } from 'heroui-native/accordion';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/app-text';
-import { AppSurface } from '@/components/ui/app-surface';
 import { Spacing } from '@/constants/theme';
 
+const DISCLOSURE_VALUE = 'details';
+
 export function ServiceDisclosure({ title, body }: { title: string; body: string }) {
-  const [expanded, setExpanded] = useState(false);
+  const [value, setValue] = useState<string | undefined>();
   return (
-    <AppSurface variant="muted" style={styles.surface}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityState={{ expanded }}
-        onPress={() => setExpanded((value) => !value)}
-        style={styles.button}>
-        <AppText variant="labelStrong">{title}</AppText>
-        <AppText tone="textSecondary">{expanded ? '−' : '+'}</AppText>
-      </Pressable>
-      {expanded ? (
-        <View style={styles.body}>
+    <Accordion
+      selectionMode="single"
+      variant="surface"
+      hideSeparator
+      value={value}
+      onValueChange={setValue}
+      className="rounded-xl bg-surface-secondary"
+      style={styles.surface}>
+      <Accordion.Item value={DISCLOSURE_VALUE}>
+        <Accordion.Trigger accessibilityLabel={title} className="min-h-11 px-4">
+          <View style={styles.heading}>
+            <AppText variant="labelStrong">{title}</AppText>
+            <Accordion.Indicator />
+          </View>
+        </Accordion.Trigger>
+        <Accordion.Content className="px-4 pb-4">
           <AppText tone="textSecondary">{body}</AppText>
-        </View>
-      ) : null}
-    </AppSurface>
+        </Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
   );
 }
 
 const styles = StyleSheet.create({
   surface: { overflow: 'hidden' },
-  button: {
+  heading: {
     minHeight: 44,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
+    gap: Spacing.two,
   },
-  body: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },
 });

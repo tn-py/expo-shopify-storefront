@@ -1,4 +1,5 @@
 import {
+  addReorderLines,
   formatOrderDate,
   getOrderStatusPresentation,
   reorderLinesForOrder,
@@ -81,5 +82,32 @@ describe('order presentation recovery', () => {
       { variantId: null, quantity: 1 },
       { variantId: 'gid://shopify/ProductVariant/2', quantity: 0 },
     ])).toEqual([{ variantId: 'gid://shopify/ProductVariant/1', quantity: 2 }]);
+  });
+
+  it('retries only the failed and remaining reorder inputs after partial success', async () => {
+    const lines = [
+      { variantId: 'gid://shopify/ProductVariant/1', quantity: 1 },
+      { variantId: 'gid://shopify/ProductVariant/2', quantity: 2 },
+      { variantId: 'gid://shopify/ProductVariant/3', quantity: 3 },
+    ];
+    let secondVariantAttempts = 0;
+    const addLine = jest.fn(async (variantId: string) => {
+      if (variantId.endsWith('/2') && secondVariantAttempts++ === 0) throw new Error('offline');
+    });
+
+    const first = await addReorderLines(lines, addLine);
+    expect(first).toEqual({
+      addedCount: 1,
+      remaining: lines.slice(1),
+    });
+    const retry = await addReorderLines(first.remaining, addLine);
+
+    expect(retry).toEqual({ addedCount: 2, remaining: [] });
+    expect(addLine.mock.calls.map(([variantId]) => variantId)).toEqual([
+      'gid://shopify/ProductVariant/1',
+      'gid://shopify/ProductVariant/2',
+      'gid://shopify/ProductVariant/2',
+      'gid://shopify/ProductVariant/3',
+    ]);
   });
 });

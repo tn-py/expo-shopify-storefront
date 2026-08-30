@@ -18,6 +18,7 @@ import { formatMoney } from '@/lib/format';
 import { useCart } from '@/shopify/cart';
 import { useOrder, type OrderDetail, type OrderFulfillment } from '@/shopify/customer';
 import {
+  addReorderLines,
   formatOrderDate,
   getOrderStatusPresentation,
   humanizeStatus,
@@ -72,7 +73,7 @@ function AuthenticatedOrder({
     return <StateView mode="empty" title="Order not found" message="It may belong to a different customer account." />;
   }
 
-  return <OrderContent order={query.data} />;
+  return <OrderContent key={query.data.id} order={query.data} />;
 }
 
 function OrderContent({ order }: { order: OrderDetail }) {
@@ -80,6 +81,9 @@ function OrderContent({ order }: { order: OrderDetail }) {
   const { addLine } = useCart();
   const [reordering, setReordering] = useState(false);
   const [reorderMessage, setReorderMessage] = useState<string | null>(null);
+  const [remainingReorderLines, setRemainingReorderLines] = useState<
+    ReturnType<typeof reorderLinesForOrder> | null
+  >(null);
   const status = getOrderStatusPresentation(order);
   const lines = order.lineItems.edges.map((edge) => edge.node);
   const reorderLines = reorderLinesForOrder(lines);
@@ -89,19 +93,21 @@ function OrderContent({ order }: { order: OrderDetail }) {
   const reorder = async () => {
     setReordering(true);
     setReorderMessage(null);
-    let added = 0;
     try {
-      for (const line of reorderLines) {
-        await addLine(line.variantId, line.quantity);
-        added += 1;
+      const attemptedLines = remainingReorderLines ?? reorderLines;
+      const result = await addReorderLines(attemptedLines, addLine);
+      if (!result.remaining.length) {
+        setRemainingReorderLines(null);
+        router.push('/cart');
+      } else {
+        setRemainingReorderLines(result.remaining);
+        const previouslyAdded = reorderLines.length - attemptedLines.length;
+        setReorderMessage(
+          previouslyAdded + result.addedCount > 0
+            ? 'Some items were added. Review your cart before trying the remaining items again.'
+            : 'Those items couldn’t be added right now. Try again or shop for current alternatives.',
+        );
       }
-      router.push('/cart');
-    } catch {
-      setReorderMessage(
-        added
-          ? 'Some items were added. Review your cart before trying the remaining items again.'
-          : 'Those items couldn’t be added right now. Try again or shop for current alternatives.',
-      );
     } finally {
       setReordering(false);
     }
@@ -177,9 +183,9 @@ function OrderContent({ order }: { order: OrderDetail }) {
 
         {reorderMessage ? <AppText accessibilityRole="alert" tone="sale">{reorderMessage}</AppText> : null}
         <AppButton
-          label="Reorder available items"
+          label={remainingReorderLines ? 'Retry remaining items' : 'Reorder available items'}
           loading={reordering}
-          disabled={!reorderLines.length}
+          disabled={!(remainingReorderLines ?? reorderLines).length}
           onPress={() => void reorder()}
         />
         {supportUrl ? (

@@ -5,6 +5,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { CustomerAuthGate, type AuthenticatedCustomerAccess } from '@/components/customer-auth-gate';
 import { AppButton, AppText, OrderCard, StateView } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { usePaginationLock } from '@/hooks/use-pagination-lock';
 import { useOrders } from '@/shopify/customer';
 
 export default function OrdersScreen() {
@@ -17,6 +18,11 @@ export default function OrdersScreen() {
 
 function AuthenticatedOrders({ access }: { access: AuthenticatedCustomerAccess }) {
   const query = useOrders(access.getAccessToken, access.customerSessionKey);
+  const loadNextPage = usePaginationLock({
+    hasNextPage: Boolean(query.hasNextPage),
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+  });
   const pages = query.data?.pages;
   const orders = useMemo(
     () => pages?.flatMap((page) => page.customer.orders.edges.map((edge) => edge.node)) ?? [],
@@ -45,9 +51,7 @@ function AuthenticatedOrders({ access }: { access: AuthenticatedCustomerAccess }
         onRefresh={query.refetch}
         refreshing={query.isRefetching && !query.isFetchingNextPage}
         onEndReachedThreshold={0.4}
-        onEndReached={() => {
-          if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
-        }}
+        onEndReached={() => void loadNextPage()}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <StateView
@@ -62,7 +66,7 @@ function AuthenticatedOrders({ access }: { access: AuthenticatedCustomerAccess }
               <AppButton
                 label="Retry loading more orders"
                 variant="secondary"
-                onPress={() => void query.fetchNextPage()}
+                onPress={() => void loadNextPage()}
               />
             ) : null}
             {query.isFetchingNextPage ? <AppText tone="textSecondary">Loading more…</AppText> : null}

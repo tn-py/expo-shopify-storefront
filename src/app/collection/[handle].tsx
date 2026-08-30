@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import {
-  canLoadNextPage,
   CatalogSkeleton,
   getCatalogColumnCount,
   getSupportedFilters,
@@ -20,6 +19,7 @@ import {
   StateView,
 } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { usePaginationLock } from '@/hooks/use-pagination-lock';
 import { track } from '@/lib/analytics';
 import { useCollection } from '@/shopify/hooks';
 import type { CollectionSortKey, ProductFilterValue } from '@/shopify/types';
@@ -45,6 +45,11 @@ export default function CollectionScreen() {
     [selectedFilters],
   );
   const query = useCollection(handle ?? '', sort.key, sort.reverse, filterInputs);
+  const loadNextPage = usePaginationLock({
+    hasNextPage: Boolean(query.hasNextPage),
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+  });
   const collection = query.data?.pages[0]?.collection ?? null;
   const products = useMemo(
     () => query.data?.pages.flatMap((page) => page.collection?.products.nodes ?? []) ?? [],
@@ -98,16 +103,7 @@ export default function CollectionScreen() {
         contentContainerStyle={styles.list}
         columnWrapperStyle={styles.row}
         onEndReachedThreshold={0.4}
-        onEndReached={() => {
-          if (
-            canLoadNextPage({
-              hasNextPage: Boolean(query.hasNextPage),
-              isFetchingNextPage: query.isFetchingNextPage,
-            })
-          ) {
-            query.fetchNextPage();
-          }
-        }}
+        onEndReached={() => void loadNextPage()}
         ListHeaderComponent={
           <View style={styles.header}>
             {collection.image ? (
@@ -178,7 +174,7 @@ export default function CollectionScreen() {
           query.isFetchNextPageError ? (
             <View style={styles.paginationError}>
               <AppText variant="caption" tone="textSecondary">Couldn’t load more products. Your current items are still here.</AppText>
-              <AppButton label="Try again" variant="secondary" onPress={() => query.fetchNextPage()} />
+              <AppButton label="Try again" variant="secondary" onPress={() => void loadNextPage()} />
             </View>
           ) : query.isFetchingNextPage ? (
             <CatalogSkeleton label="Loading more products" />

@@ -53,9 +53,12 @@ export function CheckoutEvents() {
       'completed',
       (event: CheckoutCompletedEvent) => {
         const params = completionParams(event);
+        const purchaseTotal = Number(event.orderDetails.cart.price.total?.amount);
+        const currency = event.orderDetails.cart.price.total?.currencyCode;
         track('purchase', {
           order_id: params.orderId,
-          total: params.displayTotal,
+          ...(Number.isFinite(purchaseTotal) ? { total: purchaseTotal } : {}),
+          ...(currency ? { currency } : {}),
         });
         void clearLocal();
         router.replace({

@@ -36,6 +36,7 @@ export function CustomerAuthGate({
         title="Sign in to continue"
         message={actionError ?? 'Your account details stay private until you sign in.'}
         actionLabel={signingIn ? 'Opening sign in…' : 'Sign in'}
+        actionLoading={signingIn}
         onAction={async () => {
           setSigningIn(true);
           setActionError(null);

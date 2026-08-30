@@ -1,10 +1,15 @@
-import { StyleSheet, View, type ViewProps } from 'react-native';
+import { Surface } from 'heroui-native/surface';
+import { StyleSheet, type ViewProps } from 'react-native';
 
-import { useTheme } from '@/hooks/use-theme';
-
-export function StickyActionBar({ style, ...props }: ViewProps) {
-  const theme = useTheme();
-  return <View style={[styles.root, { backgroundColor: theme.background, borderTopColor: theme.border }, style]} {...props} />;
+export function StickyActionBar({ className, style, ...props }: ViewProps) {
+  return (
+    <Surface
+      variant="default"
+      className={['border-t border-border bg-surface', className].filter(Boolean).join(' ')}
+      style={[styles.root, style]}
+      {...props}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

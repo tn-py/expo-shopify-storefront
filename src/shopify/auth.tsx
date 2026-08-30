@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
@@ -22,6 +23,7 @@ import { ShopifyEnv, isCustomerAccountConfigured } from './env';
 WebBrowser.maybeCompleteAuthSession();
 
 const TOKEN_KEY = 'storefront.customer.tokens';
+const SIGNED_OUT_TOMBSTONE_KEY = 'storefront.customer.signed-out';
 const SCOPES = ['openid', 'email', 'customer-account-api:full'];
 
 interface StoredTokens {
@@ -70,6 +72,16 @@ const redirectUri = AuthSession.makeRedirectUri({
 });
 
 async function loadTokens(): Promise<StoredTokens | null> {
+  const signedOut = await AsyncStorage.getItem(SIGNED_OUT_TOMBSTONE_KEY);
+  if (signedOut) {
+    try {
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await AsyncStorage.removeItem(SIGNED_OUT_TOMBSTONE_KEY);
+    } catch {
+      // Keep the durable tombstone: persisted credentials remain non-rehydratable.
+    }
+    return null;
+  }
   const raw = await SecureStore.getItemAsync(TOKEN_KEY);
   return raw ? (JSON.parse(raw) as StoredTokens) : null;
 }
@@ -100,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [customerProfileStatus, setCustomerProfileStatus] = useState<CustomerProfileStatus>('idle');
   const [customerProfileError, setCustomerProfileError] = useState<string | null>(null);
   const profileRequestVersion = useRef(0);
+  const profileAccessToken = useRef<string | null>(null);
 
   useEffect(() => {
     tokensRef.current = tokens;
@@ -109,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const t = await loadTokens();
+        tokensRef.current = t;
         setTokens(t);
       } finally {
         setReady(true);
@@ -117,13 +131,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearCustomerSession = useCallback(async (): Promise<void> => {
+    await AsyncStorage.setItem(SIGNED_OUT_TOMBSTONE_KEY, '1');
+    tokensRef.current = null;
     let tokenDeletionError: unknown;
     try {
       await deleteTokens();
+      await AsyncStorage.removeItem(SIGNED_OUT_TOMBSTONE_KEY);
     } catch (error) {
       tokenDeletionError = error;
     }
     profileRequestVersion.current += 1;
+    profileAccessToken.current = null;
     await clearCustomerQueries(queryClient);
     setTokens(null);
     setCustomer(null);
@@ -139,7 +157,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const current = tokensRef.current ?? (await loadTokens());
     if (!current) return null;
     if (Date.now() < current.expiresAt - 60_000) return current.accessToken;
-    if (!current.refreshToken) return current.accessToken; // best effort
+    if (!current.refreshToken) {
+      if (Date.now() < current.expiresAt) return current.accessToken;
+      await clearCustomerSession();
+      return null;
+    }
     try {
       const r = await AuthSession.refreshAsync(
         {
@@ -151,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const next = toStored(r);
       next.refreshToken = next.refreshToken ?? current.refreshToken;
       await saveTokens(next);
+      tokensRef.current = next;
       setTokens(next);
       return next.accessToken;
     } catch {
@@ -206,22 +229,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const retryCustomerProfile = useCallback(async (): Promise<void> => {
-    const current = tokensRef.current ?? (await loadTokens());
-    if (!current?.accessToken) {
+    const token = await getAccessToken();
+    if (!token) {
       throw new Error('Sign in before loading a customer profile.');
     }
-    await loadCustomerProfile(current.accessToken);
-  }, [loadCustomerProfile]);
+    profileAccessToken.current = token;
+    await loadCustomerProfile(token);
+  }, [getAccessToken, loadCustomerProfile]);
 
   useEffect(() => {
-    const token = tokens?.accessToken;
-    if (!token) return;
-    void Promise.resolve(token)
-      .then(loadCustomerProfile)
+    if (!tokens?.accessToken) return;
+    let active = true;
+    void getAccessToken()
+      .then((token) => {
+        if (!active || !token || profileAccessToken.current === token) return;
+        profileAccessToken.current = token;
+        return loadCustomerProfile(token);
+      })
       .catch(() => {
         // The explicit profile error remains available to the cart for retry.
       });
-  }, [loadCustomerProfile, tokens?.accessToken]);
+    return () => { active = false; };
+  }, [getAccessToken, loadCustomerProfile, tokens?.accessToken]);
 
   const signIn = useCallback(async () => {
     if (!isCustomerAccountConfigured) {
@@ -250,6 +279,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
     const stored = toStored(exchange);
     await saveTokens(stored);
+    await AsyncStorage.removeItem(SIGNED_OUT_TOMBSTONE_KEY);
+    tokensRef.current = stored;
     setTokens(stored);
     track('login');
   }, []);

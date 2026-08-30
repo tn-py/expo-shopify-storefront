@@ -134,10 +134,14 @@ describe('CartProvider identity synchronization', () => {
 });
 
 describe('CartProvider snapshot ordering', () => {
-  it('does not let an older cross-line response replace a newer cart snapshot', async () => {
+  it('reconciles an older cross-line response so both successful mutations remain visible', async () => {
     const pending = new Map<string, (value: unknown) => void>();
+    let cartQueryCount = 0;
     mockStorefront.mockImplementation((operation: string, variables: { lines?: { id: string }[] }) => {
-      if (operation === CART_QUERY) return Promise.resolve({ cart: makeCart() });
+      if (operation === CART_QUERY) {
+        cartQueryCount += 1;
+        return Promise.resolve({ cart: cartQueryCount === 1 ? makeCart() : makeCart(2, 3) });
+      }
       if (operation === CART_LINES_UPDATE) {
         const id = variables.lines![0].id;
         return new Promise((resolve) => pending.set(id, resolve));
@@ -166,6 +170,7 @@ describe('CartProvider snapshot ordering', () => {
       pending.get('line-1')!({ cartLinesUpdate: { cart: makeCart(2, 1), userErrors: [] } });
       await first;
     });
-    expect(latestCartContext!.cart?.lines.nodes.map((item) => item.quantity)).toEqual([1, 3]);
+    expect(latestCartContext!.cart?.lines.nodes.map((item) => item.quantity)).toEqual([2, 3]);
+    expect(cartQueryCount).toBe(2);
   });
 });

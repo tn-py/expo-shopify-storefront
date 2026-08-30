@@ -1,7 +1,5 @@
-import { Pressable, StyleSheet, View, type PressableProps } from 'react-native';
-
-import { AppText } from '@/components/ui/app-text';
-import { useTheme } from '@/hooks/use-theme';
+import { ListGroup } from 'heroui-native/list-group';
+import { StyleSheet, type PressableProps } from 'react-native';
 
 export type AccountMenuRowProps = Omit<PressableProps, 'children'> & { label: string; detail?: string };
 
@@ -10,29 +8,42 @@ export function AccountMenuRow({
   detail,
   disabled = false,
   style,
+  className,
   accessibilityRole: _accessibilityRole,
-  accessibilityState: _accessibilityState,
+  accessibilityState,
   ...props
 }: AccountMenuRowProps) {
-  const theme = useTheme();
   const isDisabled = Boolean(disabled);
   return (
-    <Pressable
+    <ListGroup.Item
       {...props}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: isDisabled }}
+      accessibilityState={{ ...accessibilityState, disabled: isDisabled }}
       disabled={isDisabled}
+      className={[className, 'min-h-14 border-b border-border'].filter(Boolean).join(' ')}
       style={(state) => [
         typeof style === 'function' ? style(state) : style,
         styles.row,
-        { borderBottomColor: theme.border },
         isDisabled && styles.disabled,
       ]}>
-      <View><AppText variant="label">{label}</AppText>{detail ? <AppText variant="caption" tone="textSecondary">{detail}</AppText> : null}</View>
-      <AppText tone="textSecondary">›</AppText>
-    </Pressable>
+      <ListGroup.ItemContent>
+        <ListGroup.ItemTitle>{label}</ListGroup.ItemTitle>
+        {detail ? <ListGroup.ItemDescription>{detail}</ListGroup.ItemDescription> : null}
+      </ListGroup.ItemContent>
+      <ListGroup.ItemSuffix />
+    </ListGroup.Item>
   );
 }
 
-const styles = StyleSheet.create({ row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 8 }, disabled: { opacity: 0.45 } });
+const styles = StyleSheet.create({
+  row: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+  },
+  disabled: { opacity: 0.45 },
+});

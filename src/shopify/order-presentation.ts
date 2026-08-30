@@ -84,6 +84,24 @@ export function reorderLinesForOrder(
   );
 }
 
+export async function addReorderLines(
+  lines: { variantId: string; quantity: number }[],
+  addLine: (variantId: string, quantity: number) => Promise<void>,
+): Promise<{
+  addedCount: number;
+  remaining: { variantId: string; quantity: number }[];
+}> {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    try {
+      await addLine(line.variantId, line.quantity);
+    } catch {
+      return { addedCount: index, remaining: lines.slice(index) };
+    }
+  }
+  return { addedCount: lines.length, remaining: [] };
+}
+
 export function safeTrackingUrl(value: string | null | undefined): string | null {
   if (!value) return null;
   try {

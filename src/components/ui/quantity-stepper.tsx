@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Button } from 'heroui-native/button';
+import { StyleSheet, View } from 'react-native';
 
-import { Fonts } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { AppText } from '@/components/ui/app-text';
 
 export type QuantityStepperProps = {
   value: number;
@@ -12,33 +12,43 @@ export type QuantityStepperProps = {
   onChange: (value: number) => void;
 };
 
+/**
+ * HeroUI Native has no quantity-stepper behavior, so the app owns the
+ * adjustable contract while each interactive control is a granular Button.
+ */
 export function QuantityStepper({ value, min = 1, max, disabled = false, busy = false, onChange }: QuantityStepperProps) {
-  const theme = useTheme();
   const decreaseDisabled = disabled || value <= min;
   const increaseDisabled = disabled || (max != null && value >= max);
-  const controlStyle = [styles.control, { backgroundColor: theme.backgroundElement }];
 
   return (
     <View accessibilityRole="adjustable" accessibilityState={{ busy, disabled }} accessibilityValue={{ now: value, min, max }} style={styles.root}>
-      <Pressable
+      <Button
+        variant="secondary"
+        size="sm"
+        isIconOnly
+        isDisabled={decreaseDisabled}
         accessibilityRole="button"
         accessibilityLabel="Decrease quantity"
         accessibilityState={{ disabled: decreaseDisabled }}
-        disabled={decreaseDisabled}
         onPress={() => onChange(value - 1)}
-        style={[controlStyle, decreaseDisabled && styles.disabled]}>
-        <Text style={{ color: theme.text }}>−</Text>
-      </Pressable>
-      <Text accessibilityLabel={`Quantity ${value}`} style={[styles.value, { color: theme.text }]}>{value}</Text>
-      <Pressable
+        className="min-h-11 min-w-11 rounded-full"
+        style={styles.control}>
+        <Button.Label>−</Button.Label>
+      </Button>
+      <AppText accessibilityLabel={`Quantity ${value}`} variant="labelStrong" style={styles.value}>{value}</AppText>
+      <Button
+        variant="secondary"
+        size="sm"
+        isIconOnly
+        isDisabled={increaseDisabled}
         accessibilityRole="button"
         accessibilityLabel="Increase quantity"
         accessibilityState={{ disabled: increaseDisabled }}
-        disabled={increaseDisabled}
         onPress={() => onChange(value + 1)}
-        style={[controlStyle, increaseDisabled && styles.disabled]}>
-        <Text style={{ color: theme.text }}>+</Text>
-      </Pressable>
+        className="min-h-11 min-w-11 rounded-full"
+        style={styles.control}>
+        <Button.Label>+</Button.Label>
+      </Button>
     </View>
   );
 }
@@ -46,6 +56,5 @@ export function QuantityStepper({ value, min = 1, max, disabled = false, busy = 
 const styles = StyleSheet.create({
   root: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   control: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
-  disabled: { opacity: 0.45 },
-  value: { minWidth: 24, textAlign: 'center', fontFamily: Fonts.semibold },
+  value: { minWidth: 24, textAlign: 'center' },
 });

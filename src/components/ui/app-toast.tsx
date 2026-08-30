@@ -1,9 +1,8 @@
-import { StyleSheet, View } from 'react-native';
+import { Alert } from 'heroui-native/alert';
+import { StyleSheet } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
 import { AppButton } from './app-button';
-import { AppSurface } from './app-surface';
-import { AppText } from './app-text';
 
 export type AppToastProps = {
   message: string;
@@ -11,20 +10,28 @@ export type AppToastProps = {
   onAction?: () => void;
 };
 
+/**
+ * This app-owned "toast" is intentionally inline and recoverable rather than
+ * ephemeral; HeroUI Alert supplies the matching persistent feedback semantics.
+ */
 export function AppToast({ message, actionLabel, onAction }: AppToastProps) {
   return (
-    <View>
-      <AppSurface variant="muted" style={styles.root}>
-        <AppText accessible accessibilityRole="alert" style={styles.message}>{message}</AppText>
+    <Alert
+      status="default"
+      accessible
+      accessibilityRole="alert"
+      className="bg-surface-secondary"
+      style={styles.root}>
+      <Alert.Content>
+        <Alert.Description>{message}</Alert.Description>
         {actionLabel && onAction ? (
           <AppButton label={actionLabel} variant="secondary" onPress={onAction} />
         ) : null}
-      </AppSurface>
-    </View>
+      </Alert.Content>
+    </Alert>
   );
 }
 
 const styles = StyleSheet.create({
   root: { gap: Spacing.two, padding: Spacing.three },
-  message: { flexShrink: 1 },
 });

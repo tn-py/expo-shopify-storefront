@@ -9,6 +9,7 @@ import { OrderCard } from '@/components/ui';
 
 let mockOrderId = encodeURIComponent('gid://shopify/Order/123');
 const mockSignOut = jest.fn();
+const mockSignIn = jest.fn();
 let mockAuthenticated = false;
 let mockManagementUrl = 'https://accounts.example.com/addresses';
 
@@ -32,7 +33,7 @@ jest.mock('@/shopify/auth', () => ({
     customerProfileError: null,
     customerSessionKey: mockAuthenticated ? 'gid://shopify/Customer/1' : null,
     getAccessToken: jest.fn(),
-    signIn: jest.fn(),
+    signIn: mockSignIn,
     signOut: mockSignOut,
     retryCustomerProfile: jest.fn(),
   }),
@@ -52,6 +53,7 @@ jest.mock('@/notifications/onesignal', () => ({
   requestPushPermission: jest.fn(),
 }));
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 jest.mock('@/shopify/customer', () => ({
@@ -74,7 +76,25 @@ beforeEach(() => {
   mockAuthenticated = false;
   mockManagementUrl = 'https://accounts.example.com/addresses';
   mockSignOut.mockResolvedValue(undefined);
+  mockSignIn.mockResolvedValue(undefined);
   delete process.env.EXPO_PUBLIC_SUPPORT_EMAIL;
+});
+
+it('disables the protected-route sign-in action while OAuth is opening', async () => {
+  let finishSignIn!: () => void;
+  mockSignIn.mockReturnValue(new Promise<void>((resolve) => { finishSignIn = resolve; }));
+  const view = await render(<OrdersScreen />);
+
+  const firstPress = fireEvent.press(view.getByRole('button', { name: 'Sign in' }));
+  const opening = await view.findByRole('button', { name: 'Opening sign in…' });
+  expect(opening).toBeDisabled();
+  const secondPress = fireEvent.press(opening);
+
+  await act(async () => {
+    finishSignIn();
+    await Promise.all([firstPress, secondPress]);
+  });
+  expect(mockSignIn).toHaveBeenCalledTimes(1);
 });
 
 it('hides an insecure HTTP hosted address-management handoff', async () => {
@@ -217,7 +237,9 @@ it('exposes an accessible shared order card with separate status badges', async 
     />,
   );
 
-  expect(view.getByRole('button', { name: 'View order #1001' })).toBeOnTheScreen();
+  expect(view.getByRole('button', {
+    name: 'Order #1001, $42.00, Aug 20, 2026, Paid, Partially fulfilled',
+  })).toBeOnTheScreen();
   expect(view.getByLabelText('Paid')).toBeOnTheScreen();
   expect(view.getByLabelText('Partially fulfilled')).toBeOnTheScreen();
 });

@@ -2,11 +2,13 @@ import { fireEvent, render } from '@testing-library/react-native';
 
 import { AppButton } from '@/components/ui/app-button';
 import { AppSearchField } from '@/components/ui/app-search-field';
+import { AppSurface } from '@/components/ui/app-surface';
 import { AppText } from '@/components/ui/app-text';
 import { AppToast } from '@/components/ui/app-toast';
 import { AccountMenuRow } from '@/components/ui/account-menu-row';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SelectableChip } from '@/components/ui/selectable-chip';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
 
@@ -36,6 +38,55 @@ describe('commerce controls', () => {
     const { getByRole } = await render(<AppButton label="Save for later" variant="secondary" onPress={jest.fn()} />);
 
     expect(getByRole('button', { name: 'Save for later' })).toHaveStyle({ minHeight: 44 });
+  });
+
+  it('keeps button role, state, and touch target protected from conflicting caller props', async () => {
+    const conflictingProps = {
+      role: 'link',
+      accessibilityRole: 'link',
+      'aria-busy': false,
+      'aria-disabled': false,
+      accessibilityState: { busy: false, disabled: false },
+      disabled: false,
+      style: () => ({ minHeight: 1, marginTop: 8 }),
+    } as const;
+    const { getByRole } = await render(
+      <AppButton label="Submitting order" loading {...conflictingProps} />,
+    );
+
+    const button = getByRole('button', { name: 'Submitting order' });
+    expect(button).toBeBusy();
+    expect(button).toBeDisabled();
+    expect(button).toHaveStyle({ minHeight: 44 });
+    expect(button).toHaveStyle({ marginTop: 8 });
+  });
+
+  it('binds shared commerce visuals to semantic Uniwind theme tokens', async () => {
+    const { getByLabelText, getByTestId } = await render(
+      <>
+        <AppSurface testID="surface" variant="muted" />
+        <AppText testID="muted-copy" tone="textSecondary">Muted copy</AppText>
+        <AppSearchField accessibilityLabel="Semantic search" value="linen" onChangeText={jest.fn()} />
+        <StatusBadge label="Paid" tone="success" />
+      </>,
+    );
+
+    expect(getByTestId('surface')).toHaveProp(
+      'className',
+      expect.stringContaining('bg-surface-secondary'),
+    );
+    expect(getByTestId('muted-copy')).toHaveProp(
+      'className',
+      expect.stringContaining('text-muted'),
+    );
+    expect(getByLabelText('Semantic search')).toHaveProp(
+      'className',
+      expect.stringContaining('text-foreground'),
+    );
+    expect(getByLabelText('Paid')).toHaveProp(
+      'className',
+      expect.stringContaining('chip__root'),
+    );
   });
 
   it('prevents decrement below the minimum while retaining accessible button targets', async () => {

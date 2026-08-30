@@ -4,7 +4,6 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  canLoadNextPage,
   CatalogSkeleton,
   getCatalogColumnCount,
   ProductCard,
@@ -13,6 +12,7 @@ import {
 import { EmptyState, ErrorState } from '@/components/screen-state';
 import { AppButton, AppSearchField, AppSurface, AppText, CatalogGrid, SelectableChip } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { usePaginationLock } from '@/hooks/use-pagination-lock';
 import { screen, track } from '@/lib/analytics';
 import { usePredictiveSearch, useSearchProducts } from '@/shopify/hooks';
 
@@ -34,6 +34,11 @@ export default function SearchScreen() {
   const debouncedDraft = useDebounced(draftQuery.trim());
   const predictive = usePredictiveSearch(debouncedDraft);
   const submitted = useSearchProducts(submittedQuery);
+  const loadNextPage = usePaginationLock({
+    hasNextPage: presentationModeCanPaginate(submittedQuery, submitted.hasNextPage),
+    isFetchingNextPage: submitted.isFetchingNextPage,
+    fetchNextPage: submitted.fetchNextPage,
+  });
 
   useEffect(() => screen('Search'), []);
 
@@ -100,15 +105,7 @@ export default function SearchScreen() {
         columnWrapperStyle={styles.row}
         onEndReachedThreshold={0.4}
         onEndReached={() => {
-          if (
-            presentation.mode === 'results' &&
-            canLoadNextPage({
-              hasNextPage: Boolean(submitted.hasNextPage),
-              isFetchingNextPage: submitted.isFetchingNextPage,
-            })
-          ) {
-            submitted.fetchNextPage();
-          }
+          if (presentation.mode === 'results') void loadNextPage();
         }}
         ListHeaderComponent={
           <SearchHeader
@@ -141,7 +138,7 @@ export default function SearchScreen() {
           presentation.mode === 'results' && submitted.isFetchNextPageError ? (
             <View style={styles.paginationError}>
               <AppText variant="caption" tone="textSecondary">Couldn’t load more results.</AppText>
-              <AppButton label="Try again" variant="secondary" onPress={() => submitted.fetchNextPage()} />
+              <AppButton label="Try again" variant="secondary" onPress={() => void loadNextPage()} />
             </View>
           ) : presentation.mode === 'results' && submitted.isFetchingNextPage ? (
             <CatalogSkeleton label="Loading more search results" />
@@ -151,6 +148,10 @@ export default function SearchScreen() {
       />
     </AppSurface>
   );
+}
+
+function presentationModeCanPaginate(submittedQuery: string, hasNextPage: boolean | undefined) {
+  return submittedQuery.length >= 2 && Boolean(hasNextPage);
 }
 
 function SearchHeader({

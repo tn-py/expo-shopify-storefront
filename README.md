@@ -209,7 +209,7 @@ npx expo export --platform android   # full bundle smoke test
 npx expo export --platform ios       # full bundle smoke test
 ```
 
-CI runs the first three on every push and PR (`.github/workflows/ci.yml`).
+CI runs typecheck, lint, the Jest suite, and Expo Doctor on every push to `main` and every PR (`.github/workflows/ci.yml`).
 
 ## Roadmap
 

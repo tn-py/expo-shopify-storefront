@@ -27,5 +27,8 @@ jobs:
       - name: Lint
         run: npx expo lint
 
+      - name: Jest
+        run: npm test -- --runInBand
+
       - name: Doctor
         run: npx expo-doctor

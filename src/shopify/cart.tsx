@@ -133,6 +133,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return true;
   }, [setCartValue, snapshotSequencer]);
 
+  const applyMutationSnapshot = useCallback(async (
+    version: number,
+    cart: Cart,
+  ): Promise<boolean> => {
+    if (applyCartSnapshot(version, cart)) return true;
+
+    // A later full-cart response already won the local race. Re-read Shopify's
+    // authoritative snapshot so the older acknowledged mutation is not lost.
+    const cartId = cartRef.current?.id ?? cart.id;
+    const reconciliationVersion = snapshotSequencer.begin();
+    const data = await storefront<{ cart: Cart | null }>(CART_QUERY, { id: cartId });
+    const accepted = applyCartSnapshot(reconciliationVersion, data.cart);
+    if (accepted && !data.cart) await persistId(null);
+    return accepted;
+  }, [applyCartSnapshot, persistId, snapshotSequencer]);
+
   const createRemoteCart = useCallback(async (lines: CartLineInput[]): Promise<Cart> => {
     const data = await storefront<CartCreatePayload>(CART_CREATE, {
       lines,
@@ -199,13 +215,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         });
         next = requireCart(data.cartLinesAdd);
       }
-      applyCartSnapshot(version, next);
+      await applyMutationSnapshot(version, next);
       dispatch({ type: 'completed', key: 'add' });
     } catch (error) {
       dispatch({ type: 'failed', key: 'add', message: cartErrorMessage('add') });
       throw error;
     }
-  }, [applyCartSnapshot, createRemoteCart, persistId, snapshotSequencer]);
+  }, [applyMutationSnapshot, createRemoteCart, persistId, snapshotSequencer]);
 
   const [quantityQueue] = useState(() => new QuantityUpdateQueue());
   const writeQuantity = useCallback(async (lineId: string, quantity: number) => {
@@ -217,8 +233,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       lines: [{ id: lineId, quantity }],
     });
     const next = requireCart(data.cartLinesUpdate);
-    applyCartSnapshot(version, next);
-  }, [applyCartSnapshot, snapshotSequencer]);
+    await applyMutationSnapshot(version, next);
+  }, [applyMutationSnapshot, snapshotSequencer]);
 
   const updateLine = useCallback(async (lineId: string, quantity: number) => {
     if (!cartRef.current?.id) return;
@@ -247,13 +263,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         lineIds: [lineId],
       });
       const next = requireCart(data.cartLinesRemove);
-      const accepted = applyCartSnapshot(version, next);
+      const accepted = await applyMutationSnapshot(version, next);
       dispatch({ type: 'completed', key, removedLine: accepted ? removedLine : undefined });
     } catch (error) {
       dispatch({ type: 'failed', key, message: cartErrorMessage('remove') });
       throw error;
     }
-  }, [applyCartSnapshot, snapshotSequencer]);
+  }, [applyMutationSnapshot, snapshotSequencer]);
 
   const undoRemove = useCallback(async () => {
     const removedLine = state.lastRemovedLine;
@@ -267,13 +283,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         lines: [removalUndoInput(removedLine)],
       });
       const next = requireCart(data.cartLinesAdd);
-      const accepted = applyCartSnapshot(version, next);
+      const accepted = await applyMutationSnapshot(version, next);
       dispatch({ type: 'completed', key: 'undo', clearRemoved: accepted });
     } catch (error) {
       dispatch({ type: 'failed', key: 'undo', message: cartErrorMessage('undo') });
       throw error;
     }
-  }, [applyCartSnapshot, snapshotSequencer, state.lastRemovedLine]);
+  }, [applyMutationSnapshot, snapshotSequencer, state.lastRemovedLine]);
 
   const recoverStaleCart = useCallback(async (): Promise<boolean> => {
     const previous = cartRef.current;
@@ -341,7 +357,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           buyerIdentity: { email: buyerIdentityTarget.email },
         });
         const next = requireCart(data.cartBuyerIdentityUpdate);
-        if (applyCartSnapshot(version, next)) markBuyerIdentitySynced(synchronizationKey);
+        if (await applyMutationSnapshot(version, next)) markBuyerIdentitySynced(synchronizationKey);
         dispatch({ type: 'completed', key: 'buyerIdentity' });
       } catch (error) {
         dispatch({ type: 'failed', key: 'buyerIdentity', message: cartErrorMessage('buyerIdentity') });
@@ -355,7 +371,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     buyerIdentitySyncRef.current = { key: synchronizationKey, promise };
     await promise;
   }, [
-    applyCartSnapshot,
+    applyMutationSnapshot,
     buyerIdentityTarget,
     markBuyerIdentitySynced,
     snapshotSequencer,

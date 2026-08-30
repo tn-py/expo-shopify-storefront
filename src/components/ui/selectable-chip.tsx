@@ -1,7 +1,11 @@
-import { Pressable, StyleSheet, Text, type PressableProps } from 'react-native';
+import { Button } from 'heroui-native/button';
+import { useState } from 'react';
+import {
+  StyleSheet,
+  type PressableProps,
+} from 'react-native';
 
 import { Fonts } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 
 export type SelectableChipProps = Omit<PressableProps, 'children'> & {
   label: string;
@@ -13,32 +17,52 @@ export function SelectableChip({
   selected = false,
   disabled = false,
   style,
+  className,
   accessibilityRole: _accessibilityRole,
-  accessibilityState: _accessibilityState,
+  accessibilityState,
+  onPressIn,
+  onPressOut,
+  onHoverIn,
+  onHoverOut,
   ...props
 }: SelectableChipProps) {
-  const theme = useTheme();
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const isDisabled = Boolean(disabled);
+  const callerStyle = typeof style === 'function' ? style({ pressed, hovered }) : style;
   return (
-    <Pressable
+    <Button
       {...props}
+      variant={selected ? 'primary' : 'secondary'}
+      size="sm"
+      isDisabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected, disabled: isDisabled }}
-      disabled={isDisabled}
-      style={(state) => [
-        typeof style === 'function' ? style(state) : style,
-        styles.chip,
-        { backgroundColor: selected ? theme.primary : theme.backgroundElement, borderColor: theme.border },
-        isDisabled && styles.disabled,
-      ]}>
-      <Text style={[styles.label, { color: selected ? theme.onPrimary : theme.text }]}>{label}</Text>
-    </Pressable>
+      accessibilityState={{ ...accessibilityState, selected, disabled: isDisabled }}
+      className={[className, 'min-h-11 rounded-full px-4'].filter(Boolean).join(' ')}
+      style={[callerStyle, styles.chip]}
+      onPressIn={(event) => {
+        setPressed(true);
+        onPressIn?.(event);
+      }}
+      onPressOut={(event) => {
+        setPressed(false);
+        onPressOut?.(event);
+      }}
+      onHoverIn={(event) => {
+        setHovered(true);
+        onHoverIn?.(event);
+      }}
+      onHoverOut={(event) => {
+        setHovered(false);
+        onHoverOut?.(event);
+      }}>
+      <Button.Label style={styles.label}>{label}</Button.Label>
+    </Button>
   );
 }
 
 const styles = StyleSheet.create({
-  chip: { minHeight: 44, justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 999, paddingHorizontal: 16 },
+  chip: { minHeight: 44, justifyContent: 'center', borderRadius: 999, paddingHorizontal: 16 },
   label: { fontFamily: Fonts.medium, fontSize: 14 },
-  disabled: { opacity: 0.45 },
 });
