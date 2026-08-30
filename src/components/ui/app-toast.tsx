@@ -18,12 +18,18 @@ export function AppToast({ message, actionLabel, onAction }: AppToastProps) {
   return (
     <Alert
       status="default"
-      accessible
-      accessibilityRole="alert"
+      accessible={false}
+      role="none"
       className="bg-surface-secondary"
       style={styles.root}>
       <Alert.Content>
-        <Alert.Description>{message}</Alert.Description>
+        <Alert.Description
+          accessible
+          role="alert"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite">
+          {message}
+        </Alert.Description>
         {actionLabel && onAction ? (
           <AppButton label={actionLabel} variant="secondary" onPress={onAction} />
         ) : null}

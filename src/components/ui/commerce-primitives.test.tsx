@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 
 import { AppButton } from '@/components/ui/app-button';
 import { AppSearchField } from '@/components/ui/app-search-field';
@@ -13,15 +13,18 @@ import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
 
 describe('commerce controls', () => {
-  it('presents toast feedback as an accessible alert with an optional recovery action', async () => {
+  it('keeps toast alert text and its recovery action as separate accessibility elements', async () => {
     const retry = jest.fn();
-    const { getByRole, getByText } = await render(
+    const { getByRole } = await render(
       <AppToast message="Couldn’t add that item." actionLabel="Retry" onAction={retry} />,
     );
 
-    expect(getByRole('alert')).toBeOnTheScreen();
-    expect(getByText('Couldn’t add that item.')).toBeOnTheScreen();
-    await fireEvent.press(getByRole('button', { name: 'Retry' }));
+    const messageAlert = getByRole('alert');
+    const recoveryAction = getByRole('button', { name: 'Retry' });
+    expect(messageAlert).toHaveTextContent('Couldn’t add that item.');
+    expect(messageAlert).toHaveProp('accessibilityLiveRegion', 'polite');
+    expect(within(messageAlert).queryByRole('button')).toBeNull();
+    await fireEvent.press(recoveryAction);
     expect(retry).toHaveBeenCalledTimes(1);
   });
 

@@ -134,6 +134,50 @@ describe('CartProvider identity synchronization', () => {
 });
 
 describe('CartProvider snapshot ordering', () => {
+  it('does not let a mutation started before clearLocal restore the cleared cart', async () => {
+    let persistedCartId: string | null = 'cart-1';
+    let resolveUpdate!: (value: unknown) => void;
+    let cartQueryCount = 0;
+    mockStorage.getItem.mockImplementation(async () => persistedCartId);
+    mockStorage.setItem.mockImplementation(async (_key, value) => {
+      persistedCartId = value;
+    });
+    mockStorage.removeItem.mockImplementation(async () => {
+      persistedCartId = null;
+    });
+    mockStorefront.mockImplementation((operation: string) => {
+      if (operation === CART_QUERY) {
+        cartQueryCount += 1;
+        return Promise.resolve({ cart: makeCart(2, 1) });
+      }
+      if (operation === CART_LINES_UPDATE) {
+        return new Promise((resolve) => { resolveUpdate = resolve; });
+      }
+      throw new Error('unexpected operation');
+    });
+    await render(<CartProvider><Probe /></CartProvider>);
+    await waitFor(() => expect(latestCartContext?.ready).toBe(true));
+
+    let update!: Promise<void>;
+    await act(async () => {
+      update = latestCartContext!.updateLine('line-1', 4);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(resolveUpdate).toBeDefined());
+    await act(async () => {
+      await latestCartContext!.clearLocal();
+    });
+
+    await act(async () => {
+      resolveUpdate({ cartLinesUpdate: { cart: makeCart(4, 1), userErrors: [] } });
+      await update;
+    });
+
+    expect(latestCartContext!.cart).toBeNull();
+    expect(persistedCartId).toBeNull();
+    expect(cartQueryCount).toBe(1);
+  });
+
   it('reconciles an older cross-line response so both successful mutations remain visible', async () => {
     const pending = new Map<string, (value: unknown) => void>();
     let cartQueryCount = 0;

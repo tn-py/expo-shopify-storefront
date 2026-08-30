@@ -22,6 +22,7 @@ import {
   recoverStaleCart as rebuildStaleCart,
   removalUndoInput,
   resolveBuyerIdentityTarget,
+  type CartSnapshotToken,
   type CartLineInput,
   type CartOperationStatus,
 } from './cart-operations';
@@ -127,17 +128,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'cartChanged', cart });
   }, []);
 
-  const applyCartSnapshot = useCallback((version: number, cart: Cart | null): boolean => {
-    if (!snapshotSequencer.accept(version)) return false;
+  const applyCartSnapshot = useCallback((token: CartSnapshotToken, cart: Cart | null): boolean => {
+    if (!snapshotSequencer.accept(token)) return false;
     setCartValue(cart);
     return true;
   }, [setCartValue, snapshotSequencer]);
 
   const applyMutationSnapshot = useCallback(async (
-    version: number,
+    token: CartSnapshotToken,
     cart: Cart,
   ): Promise<boolean> => {
-    if (applyCartSnapshot(version, cart)) return true;
+    if (!snapshotSequencer.isCurrent(token)) return false;
+    if (applyCartSnapshot(token, cart)) return true;
+    if (!snapshotSequencer.isCurrent(token)) return false;
 
     // A later full-cart response already won the local race. Re-read Shopify's
     // authoritative snapshot so the older acknowledged mutation is not lost.
@@ -207,7 +210,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       let next: Cart;
       if (!current?.id) {
         next = await createRemoteCart(lines);
+        if (!snapshotSequencer.isCurrent(version)) return;
         await persistId(next.id);
+        if (!snapshotSequencer.isCurrent(version)) {
+          await persistId(null);
+          return;
+        }
       } else {
         const data = await storefront<CartLinesAddPayload>(CART_LINES_ADD, {
           cartId: current.id,

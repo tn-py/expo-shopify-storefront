@@ -116,24 +116,35 @@ export class QuantityUpdateQueue {
   }
 }
 
-/** Accepts newer full-cart snapshots while rejecting responses that arrive behind them. */
+export interface CartSnapshotToken {
+  generation: number;
+  version: number;
+}
+
+/** Accepts newer snapshots while rejecting stale versions and invalidated work. */
 export class CartSnapshotSequencer {
   private nextVersion = 0;
   private appliedVersion = 0;
+  private generation = 0;
 
-  begin(): number {
+  begin(): CartSnapshotToken {
     this.nextVersion += 1;
-    return this.nextVersion;
+    return { generation: this.generation, version: this.nextVersion };
   }
 
-  accept(version: number): boolean {
-    if (version < this.appliedVersion) return false;
-    this.appliedVersion = version;
+  isCurrent(token: CartSnapshotToken): boolean {
+    return token.generation === this.generation;
+  }
+
+  accept(token: CartSnapshotToken): boolean {
+    if (!this.isCurrent(token) || token.version < this.appliedVersion) return false;
+    this.appliedVersion = token.version;
     return true;
   }
 
   invalidate(): void {
-    this.appliedVersion = this.begin();
+    this.generation += 1;
+    this.appliedVersion = this.nextVersion;
   }
 }
 
