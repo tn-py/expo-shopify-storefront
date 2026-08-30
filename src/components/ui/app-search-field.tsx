@@ -6,18 +6,26 @@ export type AppSearchFieldProps = TextInputProps & {
   disabled?: boolean;
 };
 
-export function AppSearchField({ disabled = false, style, ...props }: AppSearchFieldProps) {
+export function AppSearchField({
+  disabled = false,
+  style,
+  editable: _editable,
+  accessibilityRole: _accessibilityRole,
+  accessibilityState,
+  ...props
+}: AppSearchFieldProps) {
   const theme = useTheme();
+  const isDisabled = Boolean(disabled);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <TextInput
+        {...props}
         accessibilityRole="search"
-        accessibilityState={{ disabled }}
-        editable={!disabled}
+        accessibilityState={{ ...accessibilityState, disabled: isDisabled }}
+        editable={!isDisabled}
         placeholderTextColor={theme.textSecondary}
         style={[styles.input, { color: theme.text }, style]}
-        {...props}
       />
     </View>
   );

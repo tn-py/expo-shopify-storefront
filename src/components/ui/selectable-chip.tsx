@@ -8,21 +8,30 @@ export type SelectableChipProps = Omit<PressableProps, 'children'> & {
   selected?: boolean;
 };
 
-export function SelectableChip({ label, selected = false, disabled = false, ...props }: SelectableChipProps) {
+export function SelectableChip({
+  label,
+  selected = false,
+  disabled = false,
+  style,
+  accessibilityRole: _accessibilityRole,
+  accessibilityState: _accessibilityState,
+  ...props
+}: SelectableChipProps) {
   const theme = useTheme();
   const isDisabled = Boolean(disabled);
   return (
     <Pressable
+      {...props}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected, disabled: isDisabled }}
       disabled={isDisabled}
-      style={[
+      style={(state) => [
+        typeof style === 'function' ? style(state) : style,
         styles.chip,
         { backgroundColor: selected ? theme.primary : theme.backgroundElement, borderColor: theme.border },
         isDisabled && styles.disabled,
-      ]}
-      {...props}>
+      ]}>
       <Text style={[styles.label, { color: selected ? theme.onPrimary : theme.text }]}>{label}</Text>
     </Pressable>
   );

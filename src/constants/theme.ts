@@ -68,6 +68,14 @@ export const Fonts = {
   mono: Platform.select({ ios: 'ui-monospace', default: 'monospace' }),
 } as const;
 
+/** Weight tokens are applied with the platform system font family. */
+export const FontWeights = {
+  regular: '400',
+  medium: '500',
+  semibold: '600',
+  bold: '700',
+} as const;
+
 export const Spacing = {
   half: 2,
   one: 4,

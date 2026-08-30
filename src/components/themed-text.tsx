@@ -12,11 +12,11 @@ const variants: Record<NonNullable<ThemedTextProps['type']>, AppTextProps['varia
   default: 'body',
   title: 'title',
   small: 'caption',
-  smallBold: 'caption',
+  smallBold: 'captionStrong',
   subtitle: 'heading',
-  link: 'label',
-  linkPrimary: 'label',
-  code: 'caption',
+  link: 'labelStrong',
+  linkPrimary: 'labelStrong',
+  code: 'code',
 };
 
 export function ThemedText({ type = 'default', themeColor, ...rest }: ThemedTextProps) {

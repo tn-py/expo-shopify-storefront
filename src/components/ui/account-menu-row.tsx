@@ -5,11 +5,30 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type AccountMenuRowProps = Omit<PressableProps, 'children'> & { label: string; detail?: string };
 
-export function AccountMenuRow({ label, detail, disabled = false, ...props }: AccountMenuRowProps) {
+export function AccountMenuRow({
+  label,
+  detail,
+  disabled = false,
+  style,
+  accessibilityRole: _accessibilityRole,
+  accessibilityState: _accessibilityState,
+  ...props
+}: AccountMenuRowProps) {
   const theme = useTheme();
   const isDisabled = Boolean(disabled);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: isDisabled }} disabled={isDisabled} style={[styles.row, { borderBottomColor: theme.border }, isDisabled && styles.disabled]} {...props}>
+    <Pressable
+      {...props}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isDisabled }}
+      disabled={isDisabled}
+      style={(state) => [
+        typeof style === 'function' ? style(state) : style,
+        styles.row,
+        { borderBottomColor: theme.border },
+        isDisabled && styles.disabled,
+      ]}>
       <View><AppText variant="label">{label}</AppText>{detail ? <AppText variant="caption" tone="textSecondary">{detail}</AppText> : null}</View>
       <AppText tone="textSecondary">›</AppText>
     </Pressable>
