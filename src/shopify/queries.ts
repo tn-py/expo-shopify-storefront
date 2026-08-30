@@ -164,12 +164,35 @@ export const PRODUCT_QUERY = `
           selectedOptions { name value }
           image { ...Image }
         }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
   ${MONEY}
   ${IMAGE}
   ${PRODUCT_CARD}
+`;
+
+export const PRODUCT_VARIANTS_QUERY = `
+  query ProductVariants($handle: String!, $first: Int = 100, $after: String) {
+    product(handle: $handle) {
+      variants(first: $first, after: $after) {
+        nodes {
+          id
+          title
+          availableForSale
+          sku
+          price { ...Money }
+          compareAtPrice { ...Money }
+          selectedOptions { name value }
+          image { ...Image }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
 `;
 
 export const PREDICTIVE_SEARCH_QUERY = `

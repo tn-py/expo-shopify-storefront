@@ -50,6 +50,7 @@ const product: Product = {
       variant('red-large', 'Red', 'Large', false),
       variant('blue-large', 'Blue', 'Large'),
     ],
+    pageInfo: { hasNextPage: false, endCursor: null },
   },
   tags: [],
 };

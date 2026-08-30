@@ -4,11 +4,11 @@ import {
 } from '@tanstack/react-query';
 
 import { storefront } from './client';
+import { loadProductWithAllVariants } from './product-loader';
 import {
   COLLECTIONS_QUERY,
   COLLECTION_QUERY,
   PREDICTIVE_SEARCH_QUERY,
-  PRODUCT_QUERY,
   PRODUCTS_QUERY,
   SEARCH_PRODUCTS_QUERY,
   SHOP_QUERY,
@@ -17,7 +17,6 @@ import type {
   CollectionCard,
   CollectionSortKey,
   Connection,
-  Product,
   ProductCard,
   ProductConnection,
   ProductFilterInput,
@@ -103,7 +102,7 @@ export function useCollection(
 export function useProduct(handle: string) {
   return useQuery({
     queryKey: ['product', handle],
-    queryFn: () => storefront<{ product: Product | null }>(PRODUCT_QUERY, { handle }),
+    queryFn: () => loadProductWithAllVariants(handle),
     select: (d) => d.product,
     enabled: handle.length > 0,
   });

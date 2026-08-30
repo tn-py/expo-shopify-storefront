@@ -10,3 +10,7 @@ export {
   resolveSearchPresentation,
 } from './catalog-state';
 export { getAvailableOptionValues, resolveVariantSelection } from './variant-selection';
+export {
+  getProductScrollBottomPadding,
+  multiplyMoneyAmount,
+} from './product-presentation';

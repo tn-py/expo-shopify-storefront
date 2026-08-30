@@ -44,6 +44,29 @@ describe('storefront UI configuration', () => {
     ]);
   });
 
+  it('fills partial configured-handle matches from remaining Shopify inventory without duplicates', () => {
+    const config: StorefrontUIConfig = {
+      home: {
+        sections: [
+          {
+            type: 'collections',
+            title: 'Featured collections',
+            handles: ['sale', 'missing', 'sale'],
+            limit: 2,
+          },
+        ],
+      },
+    };
+
+    expect(resolveHomeSections(config, { collections, products: [] })).toEqual([
+      {
+        type: 'collections',
+        title: 'Featured collections',
+        collections: [collections[1], collections[0]],
+      },
+    ]);
+  });
+
   it('hides data-backed sections when Shopify has no graceful fallback', () => {
     const config: StorefrontUIConfig = {
       home: {

@@ -50,7 +50,7 @@ export interface Product extends ProductCard {
   descriptionHtml: string;
   images: { nodes: ShopImage[] };
   options: ProductOption[];
-  variants: { nodes: ProductVariant[] };
+  variants: Connection<ProductVariant>;
   tags: string[];
 }
 

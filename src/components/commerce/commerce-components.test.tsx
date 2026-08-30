@@ -68,6 +68,7 @@ const product: Product = {
         sku: 'BL',
       },
     ],
+    pageInfo: { hasNextPage: false, endCursor: null },
   },
   tags: [],
 };

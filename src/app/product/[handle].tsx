@@ -4,6 +4,8 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  getProductScrollBottomPadding,
+  multiplyMoneyAmount,
   ProductOptionSelector,
   resolveVariantSelection,
   ServiceDisclosure,
@@ -40,6 +42,7 @@ export default function ProductScreen() {
   const { addLine, busy } = useCart();
   const [requestedSelection, setRequestedSelection] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
+  const [stickyActionHeight, setStickyActionHeight] = useState(0);
   const [feedback, setFeedback] = useState<AddFeedback>({ mode: 'idle' });
 
   const resolved = useMemo(
@@ -79,6 +82,10 @@ export default function ProductScreen() {
   const variant = resolved.variant;
   const price = variant?.price ?? product.priceRange.minVariantPrice;
   const compareAt = variant?.compareAtPrice;
+  const totalAmount = multiplyMoneyAmount(price.amount, quantity);
+  const totalCompareAtAmount = compareAt
+    ? multiplyMoneyAmount(compareAt.amount, quantity)
+    : undefined;
   const soldOut = !variant?.availableForSale;
   const savings = compareAt ? Number(compareAt.amount) - Number(price.amount) : 0;
   const savingsPercent = compareAt && savings > 0
@@ -122,7 +129,10 @@ export default function ProductScreen() {
       <Stack.Screen options={{ title: '' }} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}>
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: getProductScrollBottomPadding(stickyActionHeight) },
+        ]}>
         <ScrollView
           horizontal
           pagingEnabled={width < 700}
@@ -219,11 +229,19 @@ export default function ProductScreen() {
         </View>
       </ScrollView>
 
-      <StickyActionBar style={{ paddingBottom: insets.bottom + Spacing.two }}>
+      <StickyActionBar
+        onLayout={(event) => setStickyActionHeight(event.nativeEvent.layout.height)}
+        style={{ paddingBottom: insets.bottom + Spacing.two }}>
         <View style={styles.stickyContent}>
           <View style={styles.stickyPrice}>
-            <AppText variant="caption" tone="textSecondary">{quantity > 1 ? `${quantity} items` : 'Selected item'}</AppText>
-            <Price amount={price.amount} currencyCode={price.currencyCode} compareAtAmount={compareAt?.amount} />
+            <AppText variant="caption" tone="textSecondary">
+              {quantity} {quantity === 1 ? 'item' : 'items'} total
+            </AppText>
+            <Price
+              amount={totalAmount}
+              currencyCode={price.currencyCode}
+              compareAtAmount={totalCompareAtAmount}
+            />
           </View>
           <View style={styles.stickyButton}>
             <AppButton

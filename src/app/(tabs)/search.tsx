@@ -138,12 +138,12 @@ export default function SearchScreen() {
           )
         }
         ListFooterComponent={
-          submitted.isFetchNextPageError ? (
+          presentation.mode === 'results' && submitted.isFetchNextPageError ? (
             <View style={styles.paginationError}>
               <AppText variant="caption" tone="textSecondary">Couldn’t load more results.</AppText>
               <AppButton label="Try again" variant="secondary" onPress={() => submitted.fetchNextPage()} />
             </View>
-          ) : submitted.isFetchingNextPage ? (
+          ) : presentation.mode === 'results' && submitted.isFetchingNextPage ? (
             <CatalogSkeleton label="Loading more search results" />
           ) : null
         }

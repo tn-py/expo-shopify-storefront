@@ -75,6 +75,7 @@ const product: Product = {
         sku: 'SHIRT-1',
       },
     ],
+    pageInfo: { hasNextPage: false, endCursor: null },
   },
   tags: [],
 };
@@ -210,6 +211,34 @@ describe('discovery route states', () => {
     searchScreen.unmount();
   });
 
+  it('hides stale submitted pagination feedback while editing predictive suggestions', async () => {
+    hooks.usePredictiveSearch.mockReturnValue(
+      queryResult({ data: { products: [productCard], collections: [], queries: [] } }),
+    );
+    hooks.useSearchProducts.mockImplementation((query: string) =>
+      query
+        ? searchResult({
+            isFetchNextPageError: true,
+            data: {
+              pages: [
+                { search: { nodes: [productCard], pageInfo: { hasNextPage: true, endCursor: 'page-1' } } },
+              ],
+            },
+          })
+        : searchResult(),
+    );
+    const searchScreen = await render(<SearchScreen />);
+    const { getByLabelText, getByText, queryByText } = searchScreen;
+    const search = getByLabelText('Search products');
+
+    await fireEvent.changeText(search, 'linen');
+    await fireEvent(search, 'submitEditing');
+    expect(getByText('Couldn’t load more results.')).toBeOnTheScreen();
+    await fireEvent.changeText(search, 'linens');
+    expect(queryByText('Couldn’t load more results.')).toBeNull();
+    searchScreen.unmount();
+  });
+
   it('keeps Product selection recoverable when add to cart fails', async () => {
     const addLine = jest.fn().mockRejectedValue(new Error('offline'));
     cart.useCart.mockReturnValue({ addLine, busy: false });
@@ -221,6 +250,51 @@ describe('discovery route states', () => {
 
     expect(getByText(/selection is still here/i)).toBeOnTheScreen();
     expect(getByRole('button', { name: 'Try adding again' })).toBeOnTheScreen();
+  });
+
+  it('selects and adds a variant merged from a later Storefront page', async () => {
+    const laterVariant = {
+      ...product.variants.nodes[0],
+      id: 'variant-later',
+      title: 'Purple',
+      sku: 'SHIRT-PURPLE',
+      selectedOptions: [{ name: 'Color', value: 'Purple' }],
+    };
+    hooks.useProduct.mockReturnValue(
+      queryResult({
+        data: {
+          ...product,
+          options: [{ id: 'color', name: 'Color', values: ['Red', 'Purple'] }],
+          variants: {
+            nodes: [
+              {
+                ...product.variants.nodes[0],
+                selectedOptions: [{ name: 'Color', value: 'Red' }],
+              },
+              laterVariant,
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      }),
+    );
+    const addLine = jest.fn().mockResolvedValue(undefined);
+    cart.useCart.mockReturnValue({ addLine, busy: false });
+    const { getByRole } = await render(<ProductScreen />);
+
+    await fireEvent.press(getByRole('button', { name: 'Purple' }));
+    await act(async () => {
+      await fireEvent.press(getByRole('button', { name: 'Add to cart' }));
+    });
+    expect(addLine).toHaveBeenCalledWith('variant-later', 1);
+  });
+
+  it('shows a multiplied sticky total when quantity is greater than one', async () => {
+    const { getByRole, getByText } = await render(<ProductScreen />);
+
+    await fireEvent.press(getByRole('button', { name: 'Increase quantity' }));
+    expect(getByText('2 items total')).toBeOnTheScreen();
+    expect(getByText('$40.00')).toBeOnTheScreen();
   });
 
   it('renders Product loading state intentionally', async () => {

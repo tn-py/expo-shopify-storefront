@@ -69,11 +69,20 @@ function resolveByHandle<T extends { handle: string }>(
   if (!handles?.length) return available.slice(0, safeLimit);
 
   const byHandle = new Map(available.map((item) => [item.handle, item]));
+  const selectedHandles = new Set<string>();
   const configured = handles.flatMap((handle) => {
+    if (selectedHandles.has(handle)) return [];
     const item = byHandle.get(handle);
-    return item ? [item] : [];
+    if (!item) return [];
+    selectedHandles.add(handle);
+    return [item];
   });
-  return (configured.length ? configured : available).slice(0, safeLimit);
+  const fallback = available.filter((item) => {
+    if (selectedHandles.has(item.handle)) return false;
+    selectedHandles.add(item.handle);
+    return true;
+  });
+  return [...configured, ...fallback].slice(0, safeLimit);
 }
 
 export function resolveHomeSections(
