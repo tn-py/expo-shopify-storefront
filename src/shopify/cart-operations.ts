@@ -139,14 +139,26 @@ export class CartSnapshotSequencer {
 
 export type BuyerIdentityTarget =
   | { status: 'pending' }
+  | { status: 'error'; message: string }
   | { status: 'ready'; email: string | null };
 
 export function resolveBuyerIdentityTarget(
   authReady: boolean,
   isAuthenticated: boolean,
   customer: { emailAddress: string | null } | null,
+  customerProfileStatus?: 'idle' | 'loading' | 'ready' | 'error',
+  customerProfileError?: string | null,
 ): BuyerIdentityTarget {
-  if (!authReady || (isAuthenticated && !customer)) return { status: 'pending' };
+  if (!authReady) return { status: 'pending' };
+  if (isAuthenticated && customerProfileStatus === 'error') {
+    return {
+      status: 'error',
+      message:
+        customerProfileError ??
+        'We couldn’t load your customer profile. Check your connection and try again.',
+    };
+  }
+  if (isAuthenticated && !customer) return { status: 'pending' };
   return { status: 'ready', email: isAuthenticated ? customer?.emailAddress ?? null : null };
 }
 

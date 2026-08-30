@@ -36,9 +36,20 @@ export default function CartScreen() {
     removeLine,
     undoRemove,
     clearOperationError,
+    buyerIdentityError,
+    buyerIdentityErrorKind,
+    retryBuyerIdentity,
   } = useCart();
   const { canCheckout, startCheckout, presenting, error: checkoutError, recovered } = useCheckout();
   const [retryByLine, setRetryByLine] = useState<Record<string, RetryRequest>>({});
+
+  const retryCheckoutIdentity = async () => {
+    try {
+      await retryBuyerIdentity();
+    } catch {
+      // The cart identity state keeps actionable feedback visible.
+    }
+  };
 
   const undo = async () => {
     clearOperationError('undo');
@@ -134,6 +145,23 @@ export default function CartScreen() {
             returns, discounts, and the final total before placing your order.
           </AppText>
         </View>
+
+        {buyerIdentityError ? (
+          <AppSurface accessibilityRole="alert" variant="muted" style={styles.errorBox}>
+            <AppText variant="labelStrong">Checkout identity needs attention</AppText>
+            <AppText tone="sale">{buyerIdentityError}</AppText>
+            <AppButton
+              label={
+                buyerIdentityErrorKind === 'profile'
+                  ? 'Retry customer profile'
+                  : 'Retry checkout setup'
+              }
+              variant="secondary"
+              loading={operations.buyerIdentity?.pending}
+              onPress={() => { void retryCheckoutIdentity(); }}
+            />
+          </AppSurface>
+        ) : null}
 
         {checkoutError ? (
           <AppSurface accessibilityRole="alert" variant="muted" style={styles.errorBox}>

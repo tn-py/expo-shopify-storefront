@@ -65,6 +65,9 @@ export interface CartContextValue {
   syncBuyerIdentity: () => Promise<void>;
   buyerIdentityReady: boolean;
   buyerIdentityResolved: boolean;
+  buyerIdentityError: string | null;
+  buyerIdentityErrorKind: 'profile' | 'sync' | null;
+  retryBuyerIdentity: () => Promise<void>;
   clearOperationError: (key: string) => void;
   clearLocal: () => Promise<void>;
 }
@@ -82,7 +85,14 @@ function requireCart(result: MutationResult): Cart {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { ready: authReady, isAuthenticated, customer } = useAuth();
+  const {
+    ready: authReady,
+    isAuthenticated,
+    customer,
+    customerProfileStatus,
+    customerProfileError,
+    retryCustomerProfile,
+  } = useAuth();
   const [state, dispatch] = useReducer(cartOperationReducer, null, createCartOperationState);
   const [ready, setReady] = useState(false);
   const [snapshotSequencer] = useState(() => new CartSnapshotSequencer());
@@ -91,8 +101,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const syncedBuyerRef = useRef<string | null>(null);
   const buyerIdentitySyncRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const buyerIdentityTarget = useMemo(
-    () => resolveBuyerIdentityTarget(authReady, isAuthenticated, customer),
-    [authReady, customer, isAuthenticated],
+    () => resolveBuyerIdentityTarget(
+      authReady,
+      isAuthenticated,
+      customer,
+      customerProfileStatus,
+      customerProfileError,
+    ),
+    [
+      authReady,
+      customer,
+      customerProfileError,
+      customerProfileStatus,
+      isAuthenticated,
+    ],
   );
 
   const persistId = useCallback(async (id: string | null) => {
@@ -281,8 +303,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncBuyerIdentity = useCallback(async () => {
-    if (buyerIdentityTarget.status === 'pending') {
-      throw new Error('Buyer identity is still loading.');
+    if (buyerIdentityTarget.status !== 'ready') {
+      throw new Error(
+        buyerIdentityTarget.status === 'error'
+          ? buyerIdentityTarget.message
+          : 'Buyer identity is still loading.',
+      );
     }
     let current = cartRef.current;
     if (!current?.id) return;
@@ -336,11 +362,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    if (!state.cart || buyerIdentityTarget.status === 'pending') return;
+    if (!state.cart || buyerIdentityTarget.status !== 'ready') return;
     void syncBuyerIdentity().catch(() => {
       // The operation error remains available for checkout recovery UI.
     });
   }, [buyerIdentityTarget, state.cart, syncBuyerIdentity]);
+
+  const retryBuyerIdentity = useCallback(async () => {
+    if (buyerIdentityTarget.status === 'error') {
+      await retryCustomerProfile();
+      return;
+    }
+    await syncBuyerIdentity();
+  }, [buyerIdentityTarget.status, retryCustomerProfile, syncBuyerIdentity]);
 
   const clearOperationError = useCallback((key: string) => {
     dispatch({ type: 'dismissed', key });
@@ -364,6 +398,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     !state.cart ||
     (desiredBuyerIdentityKey !== null && syncedBuyerKey === desiredBuyerIdentityKey);
   const buyerIdentityResolved = buyerIdentityTarget.status === 'ready';
+  const buyerIdentityError =
+    buyerIdentityTarget.status === 'error'
+      ? buyerIdentityTarget.message
+      : state.operations.buyerIdentity?.error ?? null;
+  const buyerIdentityErrorKind = buyerIdentityTarget.status === 'error'
+    ? 'profile' as const
+    : state.operations.buyerIdentity?.error
+      ? 'sync' as const
+      : null;
   const value = useMemo<CartContextValue>(() => ({
     cart: state.cart,
     ready,
@@ -380,6 +423,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     syncBuyerIdentity,
     buyerIdentityReady,
     buyerIdentityResolved,
+    buyerIdentityError,
+    buyerIdentityErrorKind,
+    retryBuyerIdentity,
     clearOperationError,
     clearLocal,
   }), [
@@ -395,6 +441,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     syncBuyerIdentity,
     buyerIdentityReady,
     buyerIdentityResolved,
+    buyerIdentityError,
+    buyerIdentityErrorKind,
+    retryBuyerIdentity,
     clearOperationError,
     clearLocal,
   ]);

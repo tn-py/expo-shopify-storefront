@@ -58,6 +58,9 @@ describe('cart conversion states', () => {
       removeLine: jest.fn(),
       undoRemove: jest.fn(),
       clearOperationError: jest.fn(),
+      buyerIdentityError: null,
+      buyerIdentityErrorKind: null,
+      retryBuyerIdentity: jest.fn(),
     });
     checkoutModule.useCheckout.mockReturnValue({
       canCheckout: true,
@@ -111,6 +114,21 @@ describe('cart conversion states', () => {
 
     expect(getByLabelText('Quantity 4')).toBeOnTheScreen();
     expect((updateLine.mock.calls as unknown as [string, number][]).map((call) => call[1])).toEqual([2, 3, 4]);
+  });
+
+  it('shows actionable retry feedback when the customer profile cannot load', async () => {
+    const retryBuyerIdentity = jest.fn();
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      buyerIdentityError: 'We couldn’t load your customer profile. Check your connection and try again.',
+      buyerIdentityErrorKind: 'profile',
+      retryBuyerIdentity,
+    });
+    const { getByText, getByRole } = await render(<CartScreen />);
+
+    expect(getByText(/couldn’t load your customer profile/i)).toBeOnTheScreen();
+    await fireEvent.press(getByRole('button', { name: 'Retry customer profile' }));
+    expect(retryBuyerIdentity).toHaveBeenCalledTimes(1);
   });
 });
 

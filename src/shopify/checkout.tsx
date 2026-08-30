@@ -81,7 +81,7 @@ export function useCheckout() {
     operations,
     recoverStaleCart,
     syncBuyerIdentity,
-    buyerIdentityResolved,
+    buyerIdentityReady,
   } = useCart();
   const checkoutUrl = cart?.checkoutUrl;
   const [status, setStatus] = useState<CheckoutStatus>({
@@ -158,8 +158,16 @@ export function useCheckout() {
     };
   }, [checkout, guard, recoverStaleCart]);
 
+  const cartMutationPending = Object.values(operations).some((operation) => operation.pending);
+  const checkoutReady =
+    Boolean(checkoutUrl) &&
+    (cart?.totalQuantity ?? 0) > 0 &&
+    buyerIdentityReady &&
+    !cartMutationPending &&
+    !status.presenting;
+
   const startCheckout = useCallback((): boolean => {
-    if (!checkoutUrl) return false;
+    if (!checkoutUrl || !checkoutReady) return false;
     const started = guard.present(checkoutUrl, (url) => { void prepareAndPresent(url); });
     if (!started) return false;
     setStatus({ presenting: true, error: null, recovered: false });
@@ -168,16 +176,17 @@ export function useCheckout() {
       currency: cart?.cost.totalAmount.currencyCode,
     });
     return true;
-  }, [cart?.cost.totalAmount.amount, cart?.cost.totalAmount.currencyCode, checkoutUrl, guard, prepareAndPresent]);
+  }, [
+    cart?.cost.totalAmount.amount,
+    cart?.cost.totalAmount.currencyCode,
+    checkoutReady,
+    checkoutUrl,
+    guard,
+    prepareAndPresent,
+  ]);
 
-  const cartMutationPending = Object.values(operations).some((operation) => operation.pending);
   return {
-    canCheckout:
-      Boolean(checkoutUrl) &&
-      (cart?.totalQuantity ?? 0) > 0 &&
-      buyerIdentityResolved &&
-      !cartMutationPending &&
-      !status.presenting,
+    canCheckout: checkoutReady,
     startCheckout,
     ...status,
   };

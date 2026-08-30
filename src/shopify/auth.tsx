@@ -36,10 +36,15 @@ export interface CustomerProfile {
   emailAddress: string | null;
 }
 
-interface AuthContextValue {
+export type CustomerProfileStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface AuthContextValue {
   ready: boolean;
   isAuthenticated: boolean;
   customer: CustomerProfile | null;
+  customerProfileStatus: CustomerProfileStatus;
+  customerProfileError: string | null;
+  retryCustomerProfile: () => Promise<void>;
   /** Returns a valid access token, refreshing first if it's near expiry. */
   getAccessToken: () => Promise<string | null>;
   signIn: () => Promise<void>;
@@ -86,6 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [ready, setReady] = useState(false);
   const tokensRef = useRef<StoredTokens | null>(null);
+  const [customerProfileStatus, setCustomerProfileStatus] = useState<CustomerProfileStatus>('idle');
+  const [customerProfileError, setCustomerProfileError] = useState<string | null>(null);
+  const profileRequestVersion = useRef(0);
 
   useEffect(() => {
     tokensRef.current = tokens;
@@ -122,48 +130,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return next.accessToken;
     } catch {
       await deleteTokens();
+      profileRequestVersion.current += 1;
       setTokens(null);
       setCustomer(null);
+      setCustomerProfileStatus('idle');
+      setCustomerProfileError(null);
       return null;
     }
   }, []);
 
-  // Load the profile whenever we hold a token. (Clearing on sign-out / refresh
-  // failure is handled where the tokens are cleared.)
+  const loadCustomerProfile = useCallback(async (token: string): Promise<void> => {
+    const requestVersion = ++profileRequestVersion.current;
+    await Promise.resolve();
+    if (requestVersion !== profileRequestVersion.current) return;
+    setCustomer(null);
+    setCustomerProfileStatus('loading');
+    setCustomerProfileError(null);
+    try {
+      const res = await fetch(ShopifyEnv.customerAccountGraphqlUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({ query: PROFILE_QUERY }),
+      });
+      const json = await res.json();
+      const raw = json?.data?.customer;
+      if (!raw) throw new Error('Shopify did not return a customer profile.');
+      if (requestVersion !== profileRequestVersion.current) return;
+      const nextCustomer: CustomerProfile = {
+        id: raw.id ?? null,
+        firstName: raw.firstName ?? null,
+        lastName: raw.lastName ?? null,
+        emailAddress: raw.emailAddress?.emailAddress ?? null,
+      };
+      setCustomer(nextCustomer);
+      setCustomerProfileStatus('ready');
+      if (nextCustomer.emailAddress) {
+        identify(nextCustomer.emailAddress, { email: nextCustomer.emailAddress });
+      }
+      if (nextCustomer.id ?? nextCustomer.emailAddress) {
+        identifyPushUser(
+          (nextCustomer.id ?? nextCustomer.emailAddress)!,
+          nextCustomer.emailAddress,
+        );
+      }
+    } catch (error) {
+      if (requestVersion === profileRequestVersion.current) {
+        setCustomer(null);
+        setCustomerProfileStatus('error');
+        setCustomerProfileError(
+          'We couldn’t load your customer profile. Check your connection and try again.',
+        );
+      }
+      throw error;
+    }
+  }, []);
+
+  const retryCustomerProfile = useCallback(async (): Promise<void> => {
+    const current = tokensRef.current ?? (await loadTokens());
+    if (!current?.accessToken) {
+      throw new Error('Sign in before loading a customer profile.');
+    }
+    await loadCustomerProfile(current.accessToken);
+  }, [loadCustomerProfile]);
+
   useEffect(() => {
     const token = tokens?.accessToken;
     if (!token) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(ShopifyEnv.customerAccountGraphqlUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: token },
-          body: JSON.stringify({ query: PROFILE_QUERY }),
-        });
-        const json = await res.json();
-        const raw = json?.data?.customer;
-        if (raw && !cancelled) {
-          const c: CustomerProfile = {
-            id: raw.id ?? null,
-            firstName: raw.firstName ?? null,
-            lastName: raw.lastName ?? null,
-            emailAddress: raw.emailAddress?.emailAddress ?? null,
-          };
-          setCustomer(c);
-          if (c.emailAddress) identify(c.emailAddress, { email: c.emailAddress });
-          if (c.id ?? c.emailAddress) {
-            identifyPushUser((c.id ?? c.emailAddress)!, c.emailAddress);
-          }
-        }
-      } catch {
-        // non-fatal — profile just stays null
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tokens?.accessToken]);
+    void Promise.resolve(token)
+      .then(loadCustomerProfile)
+      .catch(() => {
+        // The explicit profile error remains available to the cart for retry.
+      });
+  }, [loadCustomerProfile, tokens?.accessToken]);
 
   const signIn = useCallback(async () => {
     if (!isCustomerAccountConfigured) {
@@ -198,8 +236,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await deleteTokens();
+    profileRequestVersion.current += 1;
     setTokens(null);
     setCustomer(null);
+    setCustomerProfileStatus('idle');
+    setCustomerProfileError(null);
     resetAnalytics();
     resetPushUser();
   }, []);
@@ -209,11 +250,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready,
       isAuthenticated: Boolean(tokens?.accessToken),
       customer,
+      customerProfileStatus,
+      customerProfileError,
+      retryCustomerProfile,
       getAccessToken,
       signIn,
       signOut,
     }),
-    [ready, tokens?.accessToken, customer, getAccessToken, signIn, signOut],
+    [
+      ready,
+      tokens?.accessToken,
+      customer,
+      customerProfileStatus,
+      customerProfileError,
+      retryCustomerProfile,
+      getAccessToken,
+      signIn,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
