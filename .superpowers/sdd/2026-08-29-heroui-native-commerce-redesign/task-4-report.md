@@ -26,7 +26,7 @@ Implemented and committed on `feat/heroui-native-ui-redesign`.
   cart buyer-identity path and the new protected-route gate.
 - Addresses remain view-only. Native CRUD was not added. A valid configured
   `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL` exposes the hosted Shopify
-  management handoff; invalid/non-HTTP(S) values expose no action.
+  management handoff; HTTP, malformed, and non-HTTPS values expose no action.
 - Order queries use fields documented by the Customer Account API `2026-07`:
   `financialStatus`, `fulfillmentStatus`, `cancelledAt`, `fulfillments`,
   `trackingInformation`, line-item image/variant fields, `subtotal`,
@@ -159,6 +159,8 @@ Task 2 and Task 3 reports, not a project configuration parse failure.
 ### Configuration and documentation
 
 - `.env.example`
+- `src/config/account-links.ts`
+- `src/config/account-links.test.ts`
 - `README.md`
 - `docs/customer-accounts.md`
 - `docs/shopify-setup.md`
@@ -185,3 +187,65 @@ Task 2 and Task 3 reports, not a project configuration parse failure.
   reorder availability, VoiceOver/TalkBack, dynamic type, RTL, offline recovery,
   deep-link cold starts, and Checkout Sheet recovery require device/store testing.
   The actionable iOS/Android checklist is in `docs/manual-qa.md`.
+
+## Review hardening addendum
+
+Implementation commit: `41df850 fix: harden account link boundaries`.
+
+### TDD evidence
+
+RED was captured with:
+
+```sh
+npm test -- --runInBand src/config/account-links.test.ts src/shopify/order-presentation.test.ts src/components/commerce/account-routes.test.tsx
+```
+
+- Order ID tests showed the prior route parser accepted query strings,
+  fragments, whitespace/control characters, and nonnumeric terminal IDs.
+- The account-link test suite failed because there was no centralized support
+  email or HTTPS-only management URL policy.
+- The Addresses route still exposed its hosted-management action for `http://`.
+
+GREEN after the minimal boundary changes and final control-character audit:
+
+```text
+3 suites passed, 41 tests passed, 0 failures
+```
+
+- `safeDecodeOrderId()` accepts only a raw or encoded terminal
+  `gid://shopify/Order/<positive numeric ID>` and returns `null` for malformed URI
+  encoding, whitespace, control characters, query/fragment data, and path
+  suffixes. Authenticated malformed-route tests prove `useOrder()` is never
+  mounted, so those links execute zero customer requests.
+- Account and Order Detail share the same support mailbox parser and mailto
+  builder. Invalid values and CR/LF header injection expose no support action.
+- Self-review RED proved leading/trailing CR/LF could previously be trimmed away;
+  validation now rejects control characters before normalizing ordinary spaces.
+- Hosted account management now has an HTTPS-only validator. Shipment tracking
+  retains its separately named HTTP(S) validator.
+
+### Review verification
+
+```text
+npm test -- --runInBand
+  19 suites passed, 108 tests passed, 0 snapshots, 0 failures
+
+npm run typecheck
+  exit 0
+
+npm run lint
+  exit 0
+
+git diff --check
+  exit 0
+
+npx expo export --platform ios --output-dir /tmp/uhs-export-task4-review-final-ios-20260829
+  iOS bundle exported successfully
+
+npx expo export --platform android --output-dir /tmp/uhs-export-task4-review-final-android-20260829
+  Android bundle exported successfully
+```
+
+Documentation now states the HTTPS-only address-management requirement, and the
+manual QA checklist calls out malformed order-link request suppression, support
+header injection, and insecure HTTP management configuration.
