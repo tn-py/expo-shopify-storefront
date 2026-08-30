@@ -10,6 +10,7 @@ import { OrderCard } from '@/components/ui';
 let mockOrderId = encodeURIComponent('gid://shopify/Order/123');
 const mockSignOut = jest.fn();
 let mockAuthenticated = false;
+let mockManagementUrl = 'https://accounts.example.com/addresses';
 
 jest.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
@@ -29,7 +30,7 @@ jest.mock('@/shopify/auth', () => ({
     } : null,
     customerProfileStatus: mockAuthenticated ? 'ready' : 'idle',
     customerProfileError: null,
-    customerSessionKey: null,
+    customerSessionKey: mockAuthenticated ? 'gid://shopify/Customer/1' : null,
     getAccessToken: jest.fn(),
     signIn: jest.fn(),
     signOut: mockSignOut,
@@ -38,7 +39,9 @@ jest.mock('@/shopify/auth', () => ({
 }));
 jest.mock('@/shopify/env', () => ({
   isCustomerAccountConfigured: true,
-  ShopifyEnv: { customerAccountManagementUrl: 'https://accounts.example.com/addresses' },
+  ShopifyEnv: {
+    get customerAccountManagementUrl() { return mockManagementUrl; },
+  },
 }));
 jest.mock('@/shopify/hooks', () => ({
   useShop: () => ({ data: { name: 'Studio' } }),
@@ -63,12 +66,78 @@ const customer = jest.requireMock('@/shopify/customer') as {
   useOrders: jest.Mock;
   useOrder: jest.Mock;
 };
+const cart = jest.requireMock('@/shopify/cart') as { useCart: jest.Mock };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockOrderId = encodeURIComponent('gid://shopify/Order/123');
   mockAuthenticated = false;
+  mockManagementUrl = 'https://accounts.example.com/addresses';
   mockSignOut.mockResolvedValue(undefined);
+  delete process.env.EXPO_PUBLIC_SUPPORT_EMAIL;
+});
+
+it('hides an insecure HTTP hosted address-management handoff', async () => {
+  mockAuthenticated = true;
+  mockManagementUrl = 'http://accounts.example.com/addresses';
+  customer.useAddresses.mockReturnValue({
+    data: {
+      pages: [{
+        customer: {
+          defaultAddress: null,
+          addresses: {
+            edges: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      }],
+    },
+    error: null,
+    isPending: false,
+    isError: false,
+    isRefetching: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+    hasNextPage: false,
+    refetch: jest.fn(),
+    fetchNextPage: jest.fn(),
+  });
+
+  const view = await render(<AddressesScreen />);
+
+  expect(view.queryByRole('button', { name: 'Manage addresses online' })).toBeNull();
+});
+
+it('hides order support for an invalid header-injecting configured email', async () => {
+  mockAuthenticated = true;
+  process.env.EXPO_PUBLIC_SUPPORT_EMAIL = 'support@example.com\r\nBcc:attacker@example.com';
+  customer.useOrder.mockReturnValue({
+    data: {
+      id: 'gid://shopify/Order/123',
+      name: '#1001',
+      processedAt: '2026-08-20T12:00:00Z',
+      cancelledAt: null,
+      financialStatus: 'PAID',
+      fulfillmentStatus: 'FULFILLED',
+      subtotal: { amount: '40.00', currencyCode: 'USD' },
+      totalShipping: { amount: '2.00', currencyCode: 'USD' },
+      totalTax: null,
+      totalRefunded: { amount: '0.00', currencyCode: 'USD' },
+      totalPrice: { amount: '42.00', currencyCode: 'USD' },
+      shippingAddress: null,
+      fulfillments: { nodes: [] },
+      lineItems: { edges: [] },
+    },
+    error: null,
+    isPending: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
+  cart.useCart.mockReturnValue({ addLine: jest.fn() });
+
+  const view = await render(<OrderDetailScreen />);
+
+  expect(view.queryByRole('button', { name: 'Contact support about this order' })).toBeNull();
 });
 
 it.each([
@@ -81,6 +150,30 @@ it.each([
   expect(view.getByRole('button', { name: 'Sign in' })).toBeOnTheScreen();
   expect(customer.useAddresses).not.toHaveBeenCalled();
   expect(customer.useOrders).not.toHaveBeenCalled();
+  expect(customer.useOrder).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['query string', encodeURIComponent('gid://shopify/Order/123?preview=true')],
+  ['fragment', encodeURIComponent('gid://shopify/Order/123#shipment')],
+  ['extra path suffix', encodeURIComponent('gid://shopify/Order/123/extra')],
+  ['control character', encodeURIComponent('gid://shopify/Order/123\nBcc:attacker@example.com')],
+  ['terminal whitespace', encodeURIComponent('gid://shopify/Order/123 ')],
+  ['malformed URI encoding', '%E0%A4%A'],
+])('does not execute the order hook for a direct link with %s', async (_case, routeId) => {
+  mockAuthenticated = true;
+  mockOrderId = routeId;
+  customer.useOrder.mockReturnValue({
+    data: null,
+    error: null,
+    isPending: false,
+    isError: false,
+    refetch: jest.fn(),
+  });
+
+  const view = await render(<OrderDetailScreen />);
+
+  expect(view.getByText('This order link isn’t valid')).toBeOnTheScreen();
   expect(customer.useOrder).not.toHaveBeenCalled();
 });
 

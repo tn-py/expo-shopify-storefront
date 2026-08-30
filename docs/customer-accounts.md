@@ -50,9 +50,9 @@ Set the complete hosted Shopify customer-account URL in `.env`:
 EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL=https://account.example.com/addresses
 ```
 
-Only `http://` or `https://` URLs are opened; an invalid value hides the action.
-This is the sole address-management handoff. The app does not implement native
-address create, update, or delete mutations.
+Only `https://` URLs are opened; `http://`, malformed, and non-web values hide
+the action. This is the sole address-management handoff. The app does not
+implement native address create, update, or delete mutations.
 
 ## Two things to configure in Shopify
 

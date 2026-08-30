@@ -12,6 +12,11 @@ import {
   StateView,
   StatusBadge,
 } from '@/components/ui';
+import {
+  configuredSupportEmail,
+  safeExternalHttpUrl,
+  supportMailtoUrl,
+} from '@/config/account-links';
 import { Spacing } from '@/constants/theme';
 import {
   getPushPermission,
@@ -21,11 +26,6 @@ import {
 import { useAuth } from '@/shopify/auth';
 import { isCustomerAccountConfigured } from '@/shopify/env';
 import { useShop } from '@/shopify/hooks';
-import { safeHttpUrl } from '@/shopify/order-presentation';
-
-const supportEmail = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() ?? '';
-const aboutUrl = safeHttpUrl(process.env.EXPO_PUBLIC_ABOUT_URL?.trim());
-const safeSupportEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportEmail) ? supportEmail : null;
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
@@ -33,6 +33,9 @@ export default function AccountScreen() {
   const shop = useShop();
   const [signingIn, setSigningIn] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const supportEmail = configuredSupportEmail();
+  const supportUrl = supportMailtoUrl(supportEmail);
+  const aboutUrl = safeExternalHttpUrl(process.env.EXPO_PUBLIC_ABOUT_URL?.trim());
 
   if (!auth.ready) return <StateView mode="loading" title="Loading account…" />;
 
@@ -130,14 +133,14 @@ export default function AccountScreen() {
           </AppSurface>
         ) : null}
 
-        {(isPushConfigured || safeSupportEmail || aboutUrl) ? (
+        {(isPushConfigured || supportUrl || aboutUrl) ? (
           <AppSurface variant="raised" style={styles.menu}>
             {isPushConfigured ? <NotificationsRow /> : null}
-            {safeSupportEmail ? (
+            {supportEmail && supportUrl ? (
               <AccountMenuRow
                 label="Contact support"
-                detail={safeSupportEmail}
-                onPress={() => void Linking.openURL(`mailto:${safeSupportEmail}`)}
+                detail={supportEmail}
+                onPress={() => void Linking.openURL(supportUrl)}
               />
             ) : null}
             {aboutUrl ? (

@@ -12,6 +12,7 @@ import {
   StateView,
   StatusBadge,
 } from '@/components/ui';
+import { configuredSupportEmail, supportMailtoUrl } from '@/config/account-links';
 import { Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
 import { useCart } from '@/shopify/cart';
@@ -22,10 +23,8 @@ import {
   humanizeStatus,
   reorderLinesForOrder,
   safeDecodeOrderId,
-  safeHttpUrl,
+  safeTrackingUrl,
 } from '@/shopify/order-presentation';
-
-const supportEmail = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() ?? '';
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -84,6 +83,8 @@ function OrderContent({ order }: { order: OrderDetail }) {
   const status = getOrderStatusPresentation(order);
   const lines = order.lineItems.edges.map((edge) => edge.node);
   const reorderLines = reorderLinesForOrder(lines);
+  const supportEmail = configuredSupportEmail();
+  const supportUrl = supportMailtoUrl(supportEmail, `Question about order ${order.name}`);
 
   const reorder = async () => {
     setReordering(true);
@@ -107,8 +108,7 @@ function OrderContent({ order }: { order: OrderDetail }) {
   };
 
   const contactSupport = () => {
-    const subject = encodeURIComponent(`Question about order ${order.name}`);
-    void Linking.openURL(`mailto:${supportEmail}?subject=${subject}`);
+    if (supportUrl) void Linking.openURL(supportUrl);
   };
 
   return (
@@ -182,7 +182,7 @@ function OrderContent({ order }: { order: OrderDetail }) {
           disabled={!reorderLines.length}
           onPress={() => void reorder()}
         />
-        {supportEmail ? (
+        {supportUrl ? (
           <AppButton label="Contact support about this order" variant="secondary" onPress={contactSupport} />
         ) : null}
       </ScrollView>
@@ -201,7 +201,7 @@ function ShipmentCard({ fulfillment }: { fulfillment: OrderFulfillment }) {
         </AppText>
       ) : null}
       {fulfillment.trackingInformation.map((tracking, index) => {
-        const url = safeHttpUrl(tracking.url);
+        const url = safeTrackingUrl(tracking.url);
         const label = [tracking.company, tracking.number].filter(Boolean).join(' · ') || 'Track shipment';
         return url ? (
           <AppButton

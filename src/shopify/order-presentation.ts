@@ -52,11 +52,11 @@ export function humanizeStatus(value: string): string {
   return value.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
-export function safeDecodeOrderId(value: string | undefined): string | null {
-  if (!value) return null;
+export function safeDecodeOrderId(value: string | string[] | undefined): string | null {
+  if (typeof value !== 'string' || !value) return null;
   try {
     const decoded = decodeURIComponent(value);
-    return /^gid:\/\/shopify\/Order\/[^/]+$/.test(decoded) ? decoded : null;
+    return /^gid:\/\/shopify\/Order\/[1-9]\d*$/.test(decoded) ? decoded : null;
   } catch {
     return null;
   }
@@ -84,7 +84,7 @@ export function reorderLinesForOrder(
   );
 }
 
-export function safeHttpUrl(value: string | null | undefined): string | null {
+export function safeTrackingUrl(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);

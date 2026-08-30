@@ -5,10 +5,10 @@ import { FlatList, StyleSheet, View } from 'react-native';
 
 import { CustomerAuthGate, type AuthenticatedCustomerAccess } from '@/components/customer-auth-gate';
 import { AppButton, AppSurface, AppText, StateView, StatusBadge } from '@/components/ui';
+import { safeCustomerAccountManagementUrl } from '@/config/account-links';
 import { Spacing } from '@/constants/theme';
 import { ShopifyEnv } from '@/shopify/env';
 import { useAddresses, type CustomerAddress } from '@/shopify/customer';
-import { safeHttpUrl } from '@/shopify/order-presentation';
 
 export default function AddressesScreen() {
   return (
@@ -26,7 +26,7 @@ function AuthenticatedAddresses({ access }: { access: AuthenticatedCustomerAcces
     [pages],
   );
   const defaultId = pages?.[0]?.customer.defaultAddress?.id ?? null;
-  const managementUrl = safeHttpUrl(ShopifyEnv.customerAccountManagementUrl);
+  const managementUrl = safeCustomerAccountManagementUrl(ShopifyEnv.customerAccountManagementUrl);
 
   if (query.isPending) return <StateView mode="loading" title="Loading addresses…" />;
   if (query.isError && !pages) {

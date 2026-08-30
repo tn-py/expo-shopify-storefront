@@ -79,8 +79,9 @@ in light, dark, and system appearance on each platform.
       and intentional pending, partial, fulfilled, cancelled, and refunded states.
 - [ ] Order pagination preserves existing orders on failure, disables duplicate
       next-page calls, and recovers with “Retry loading more orders.”
-- [ ] A malformed encoded order URL and an order belonging to another customer show
-      recovery/not-found states without crashing or requesting the malformed ID.
+- [ ] Order links containing a malformed escape, whitespace/control character,
+      query, fragment, or suffix show recovery without issuing a Customer Account
+      API request; another customer's valid order shows the not-found state.
 - [ ] Order detail shows item images, variants/options, quantities, subtotal,
       shipping, tax, refunds when present, and total using Shopify-returned fields.
 - [ ] Each fulfillment shows its shipment state, estimated date when present, and
@@ -88,11 +89,12 @@ in light, dark, and system appearance on each platform.
 - [ ] “Reorder available items” adds only line items with current variant IDs,
       opens Cart on success, and explains partial/no-add failure accurately.
 - [ ] Configured support email opens a pre-addressed draft containing the order
-      name; a missing/invalid email hides the action.
+      name; a missing, invalid, or CR/LF header-injecting value hides the action on
+      both Account and Order detail.
 - [ ] Addresses render Shopify's locale-formatted lines, default status, phone when
       present, empty state, and retryable pagination without exposing native CRUD.
 - [ ] The configured “Manage addresses online” action opens the expected HTTPS
-      customer-account page; a missing/invalid URL hides the action.
+      customer-account page; an HTTP, missing, or invalid URL hides the action.
 
 ## Accessibility and content direction
 

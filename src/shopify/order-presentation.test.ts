@@ -3,18 +3,41 @@ import {
   getOrderStatusPresentation,
   reorderLinesForOrder,
   safeDecodeOrderId,
+  safeTrackingUrl,
 } from './order-presentation';
 
 describe('order presentation recovery', () => {
   it('rejects malformed and non-Shopify order route ids without throwing', () => {
     expect(safeDecodeOrderId('%E0%A4%A')).toBeNull();
     expect(safeDecodeOrderId('not-an-order')).toBeNull();
+    expect(safeDecodeOrderId('gid://shopify/Order/123')).toBe('gid://shopify/Order/123');
     expect(safeDecodeOrderId(encodeURIComponent('gid://shopify/Order/123')))
       .toBe('gid://shopify/Order/123');
   });
 
+  it.each([
+    'gid://shopify/Order/123 ',
+    'gid://shopify/Order/ 123',
+    'gid://shopify/Order/123?preview=true',
+    'gid://shopify/Order/123#shipment',
+    'gid://shopify/Order/123\nBcc:attacker@example.com',
+    'gid://shopify/Order/123/extra',
+    'gid://shopify/Order/not-numeric',
+    'gid://shopify/Order/0',
+  ])('rejects a non-terminal Shopify order GID: %s', (id) => {
+    expect(safeDecodeOrderId(encodeURIComponent(id))).toBeNull();
+  });
+
   it('uses an explicit fallback for malformed dates', () => {
     expect(formatOrderDate('not-a-date')).toBe('Date unavailable');
+  });
+
+  it('keeps tracking links restricted to HTTP(S) with an explicitly named policy', () => {
+    expect(safeTrackingUrl('http://carrier.example.com/track/123'))
+      .toBe('http://carrier.example.com/track/123');
+    expect(safeTrackingUrl('https://carrier.example.com/track/123'))
+      .toBe('https://carrier.example.com/track/123');
+    expect(safeTrackingUrl('javascript:alert(1)')).toBeNull();
   });
 
   it.each([
