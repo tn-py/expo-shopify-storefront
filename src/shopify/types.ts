@@ -67,6 +67,26 @@ export interface Connection<T> {
   pageInfo: PageInfo;
 }
 
+export type ProductFilterInput = Record<string, unknown>;
+
+export interface ProductFilterValue {
+  id: string;
+  label: string;
+  count: number;
+  input: ProductFilterInput;
+}
+
+export interface ProductFilter {
+  id: string;
+  label: string;
+  type: 'BOOLEAN' | 'LIST' | 'PRICE_RANGE';
+  values: ProductFilterValue[];
+}
+
+export interface ProductConnection<T> extends Connection<T> {
+  filters: ProductFilter[];
+}
+
 /* ---- Cart ---- */
 
 export interface CartLine {
@@ -101,3 +121,10 @@ export type ProductSortKey =
   | 'CREATED'
   | 'TITLE'
   | 'RELEVANCE';
+
+export type CollectionSortKey =
+  | 'COLLECTION_DEFAULT'
+  | 'BEST_SELLING'
+  | 'PRICE'
+  | 'CREATED'
+  | 'TITLE';

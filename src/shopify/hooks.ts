@@ -1,7 +1,6 @@
 import {
   useInfiniteQuery,
   useQuery,
-  keepPreviousData,
 } from '@tanstack/react-query';
 
 import { storefront } from './client';
@@ -10,14 +9,18 @@ import {
   COLLECTION_QUERY,
   PREDICTIVE_SEARCH_QUERY,
   PRODUCT_QUERY,
+  PRODUCTS_QUERY,
   SEARCH_PRODUCTS_QUERY,
   SHOP_QUERY,
 } from './queries';
 import type {
   CollectionCard,
+  CollectionSortKey,
   Connection,
   Product,
   ProductCard,
+  ProductConnection,
+  ProductFilterInput,
   ShopImage,
 } from './types';
 
@@ -56,17 +59,29 @@ export function useCollections() {
   });
 }
 
-type CollectionSort = 'COLLECTION_DEFAULT' | 'BEST_SELLING' | 'PRICE' | 'CREATED' | 'TITLE';
+export function useProducts() {
+  return useQuery({
+    queryKey: ['products', 'featured'],
+    queryFn: () =>
+      storefront<{ products: { nodes: ProductCard[] } }>(PRODUCTS_QUERY, { first: 24 }),
+    select: (data) => data.products.nodes,
+  });
+}
 
 interface CollectionResult {
   collection:
-    | (CollectionCard & { products: Connection<ProductCard> })
+    | (CollectionCard & { products: ProductConnection<ProductCard> })
     | null;
 }
 
-export function useCollection(handle: string, sort: CollectionSort = 'COLLECTION_DEFAULT', reverse = false) {
+export function useCollection(
+  handle: string,
+  sort: CollectionSortKey = 'COLLECTION_DEFAULT',
+  reverse = false,
+  filters: ProductFilterInput[] = [],
+) {
   return useInfiniteQuery({
-    queryKey: ['collection', handle, sort, reverse],
+    queryKey: ['collection', handle, sort, reverse, filters],
     queryFn: ({ pageParam }) =>
       storefront<CollectionResult>(COLLECTION_QUERY, {
         handle,
@@ -74,6 +89,7 @@ export function useCollection(handle: string, sort: CollectionSort = 'COLLECTION
         after: pageParam ?? null,
         sortKey: sort,
         reverse,
+        filters,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => {
@@ -108,7 +124,6 @@ export function usePredictiveSearch(query: string) {
       storefront<PredictiveSearchResult>(PREDICTIVE_SEARCH_QUERY, { query }),
     select: (d) => d.predictiveSearch,
     enabled: query.trim().length >= 2,
-    placeholderData: keepPreviousData,
   });
 }
 
