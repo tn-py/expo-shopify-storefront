@@ -17,6 +17,9 @@ export const ShopifyEnv = {
   apiVersion: process.env.EXPO_PUBLIC_SHOPIFY_API_VERSION ?? '2026-07',
   customerAccountClientId:
     process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID ?? '',
+  /** Hosted Shopify customer-account page used for view-only address management. */
+  customerAccountManagementUrl:
+    process.env.EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL?.trim() ?? '',
   /** OAuth base, e.g. https://shopify.com/authentication/<shop-id> */
   customerAccountApiUrl,
   shopId,

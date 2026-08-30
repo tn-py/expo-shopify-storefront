@@ -45,8 +45,13 @@ For sign-in / order history / addresses. See
    (`https://shopify.com/authentication/<shop-id>`).
 3. Add the callback URI `shop.<shop-id>.app://callback`.
 4. Fill `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` and
-   `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL` in `.env`, then rebuild the dev
-   client.
+   `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL` in `.env`.
+5. Optional but recommended: set
+   `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL` to the full `https://` URL
+   of the hosted customer-account page customers should use to add or edit
+   addresses. The native app intentionally presents addresses as view-only.
+6. Restart Metro. Rebuild the dev client when the derived callback scheme has
+   changed.
 
 ## 4. Checkout
 

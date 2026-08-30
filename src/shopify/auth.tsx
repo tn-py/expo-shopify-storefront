@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import {
   createContext,
   useCallback,
@@ -14,6 +16,7 @@ import {
 
 import { identify, resetAnalytics, track } from '@/lib/analytics';
 import { identifyPushUser, resetPushUser } from '@/notifications/onesignal';
+import { clearCustomerQueries } from './customer-session';
 import { ShopifyEnv, isCustomerAccountConfigured } from './env';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -44,6 +47,8 @@ export interface AuthContextValue {
   customer: CustomerProfile | null;
   customerProfileStatus: CustomerProfileStatus;
   customerProfileError: string | null;
+  /** Stable discriminator used by every protected customer query key. */
+  customerSessionKey: string | null;
   retryCustomerProfile: () => Promise<void>;
   /** Returns a valid access token, refreshing first if it's near expiry. */
   getAccessToken: () => Promise<string | null>;
@@ -87,6 +92,7 @@ function toStored(r: AuthSession.TokenResponse): StoredTokens {
 const PROFILE_QUERY = `query { customer { id firstName lastName emailAddress { emailAddress } } }`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [tokens, setTokens] = useState<StoredTokens | null>(null);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [ready, setReady] = useState(false);
@@ -110,6 +116,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  const clearCustomerSession = useCallback(async (): Promise<void> => {
+    let tokenDeletionError: unknown;
+    try {
+      await deleteTokens();
+    } catch (error) {
+      tokenDeletionError = error;
+    }
+    profileRequestVersion.current += 1;
+    await clearCustomerQueries(queryClient);
+    setTokens(null);
+    setCustomer(null);
+    setCustomerProfileStatus('idle');
+    setCustomerProfileError(null);
+    resetAnalytics();
+    resetPushUser();
+    router.replace('/account');
+    if (tokenDeletionError) throw tokenDeletionError;
+  }, [queryClient]);
+
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     const current = tokensRef.current ?? (await loadTokens());
     if (!current) return null;
@@ -129,15 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTokens(next);
       return next.accessToken;
     } catch {
-      await deleteTokens();
-      profileRequestVersion.current += 1;
-      setTokens(null);
-      setCustomer(null);
-      setCustomerProfileStatus('idle');
-      setCustomerProfileError(null);
+      await clearCustomerSession();
       return null;
     }
-  }, []);
+  }, [clearCustomerSession]);
 
   const loadCustomerProfile = useCallback(async (token: string): Promise<void> => {
     const requestVersion = ++profileRequestVersion.current;
@@ -235,15 +255,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await deleteTokens();
-    profileRequestVersion.current += 1;
-    setTokens(null);
-    setCustomer(null);
-    setCustomerProfileStatus('idle');
-    setCustomerProfileError(null);
-    resetAnalytics();
-    resetPushUser();
-  }, []);
+    await clearCustomerSession();
+  }, [clearCustomerSession]);
+
+  const customerSessionKey = customer?.id ?? null;
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -252,6 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       customer,
       customerProfileStatus,
       customerProfileError,
+      customerSessionKey,
       retryCustomerProfile,
       getAccessToken,
       signIn,
@@ -263,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       customer,
       customerProfileStatus,
       customerProfileError,
+      customerSessionKey,
       retryCustomerProfile,
       getAccessToken,
       signIn,

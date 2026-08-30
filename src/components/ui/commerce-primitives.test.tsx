@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { AppButton } from '@/components/ui/app-button';
 import { AppSearchField } from '@/components/ui/app-search-field';
 import { AppText } from '@/components/ui/app-text';
+import { AppToast } from '@/components/ui/app-toast';
 import { AccountMenuRow } from '@/components/ui/account-menu-row';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SelectableChip } from '@/components/ui/selectable-chip';
@@ -10,6 +11,18 @@ import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
 
 describe('commerce controls', () => {
+  it('presents toast feedback as an accessible alert with an optional recovery action', async () => {
+    const retry = jest.fn();
+    const { getByRole, getByText } = await render(
+      <AppToast message="Couldn’t add that item." actionLabel="Retry" onAction={retry} />,
+    );
+
+    expect(getByRole('alert')).toBeOnTheScreen();
+    expect(getByText('Couldn’t add that item.')).toBeOnTheScreen();
+    await fireEvent.press(getByRole('button', { name: 'Retry' }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a primary button as a 44-point accessible target and exposes busy and disabled state', async () => {
     const { getByRole } = await render(<AppButton label="Add to cart" loading disabled onPress={jest.fn()} />);
 

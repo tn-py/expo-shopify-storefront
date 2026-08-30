@@ -1,99 +1,85 @@
 import { Link, Stack } from 'expo-router';
 import { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { EmptyState, ErrorState, LoadingState } from '@/components/screen-state';
-import { Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/lib/format';
-import { useAuth } from '@/shopify/auth';
-import { useOrders, type OrderSummary } from '@/shopify/customer';
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+import { CustomerAuthGate, type AuthenticatedCustomerAccess } from '@/components/customer-auth-gate';
+import { AppButton, AppText, OrderCard, StateView } from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { useOrders } from '@/shopify/customer';
 
 export default function OrdersScreen() {
-  const theme = useTheme();
-  const { isAuthenticated, getAccessToken } = useAuth();
-  const q = useOrders(getAccessToken, isAuthenticated);
+  return (
+    <CustomerAuthGate>
+      {(access) => <AuthenticatedOrders access={access} />}
+    </CustomerAuthGate>
+  );
+}
 
+function AuthenticatedOrders({ access }: { access: AuthenticatedCustomerAccess }) {
+  const query = useOrders(access.getAccessToken, access.customerSessionKey);
+  const pages = query.data?.pages;
   const orders = useMemo(
-    () => q.data?.pages.flatMap((p) => p.customer.orders.edges.map((e) => e.node)) ?? [],
-    [q.data],
+    () => pages?.flatMap((page) => page.customer.orders.edges.map((edge) => edge.node)) ?? [],
+    [pages],
   );
 
-  if (!isAuthenticated) return <EmptyState title="Sign in to view your orders" />;
-  if (q.isPending) return <LoadingState />;
-  if (q.isError) {
-    return <ErrorState message={(q.error as Error).message} onRetry={q.refetch} />;
+  if (query.isPending) return <StateView mode="loading" title="Loading orders…" />;
+  if (query.isError && !pages) {
+    return (
+      <StateView
+        mode="error"
+        title="We couldn’t load your orders"
+        message={(query.error as Error).message}
+        actionLabel="Retry"
+        onAction={() => void query.refetch()}
+      />
+    );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen options={{ title: 'Orders' }} />
       <FlatList
         data={orders}
-        keyExtractor={(o) => o.id}
-        onRefresh={q.refetch}
-        refreshing={q.isRefetching}
-        onEndReachedThreshold={0.5}
-        onEndReached={() => q.hasNextPage && !q.isFetchingNextPage && q.fetchNextPage()}
+        keyExtractor={(order) => order.id}
+        onRefresh={query.refetch}
+        refreshing={query.isRefetching && !query.isFetchingNextPage}
+        onEndReachedThreshold={0.4}
+        onEndReached={() => {
+          if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+        }}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={<EmptyState title="No orders yet" />}
-        renderItem={({ item }) => <OrderRow order={item} border={theme.border} />}
+        ListEmptyComponent={
+          <StateView
+            mode="empty"
+            title="No orders yet"
+            message="Orders placed with this customer account will appear here."
+          />
+        }
+        ListFooterComponent={
+          <View style={styles.footer}>
+            {query.isFetchNextPageError ? (
+              <AppButton
+                label="Retry loading more orders"
+                variant="secondary"
+                onPress={() => void query.fetchNextPage()}
+              />
+            ) : null}
+            {query.isFetchingNextPage ? <AppText tone="textSecondary">Loading more…</AppText> : null}
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Link href={`/account/order/${encodeURIComponent(item.id)}` as never} asChild>
+            <OrderCard order={item} />
+          </Link>
+        )}
       />
-    </ThemedView>
+    </View>
   );
-}
-
-function OrderRow({ order, border }: { order: OrderSummary; border: string }) {
-  const items = order.lineItems.edges.map((e) => e.node);
-  const summary = items
-    .map((i) => `${i.quantity}× ${i.title}`)
-    .join(', ');
-
-  return (
-    <Link href={`/account/order/${encodeURIComponent(order.id)}` as never} asChild>
-      <Pressable style={[styles.row, { borderColor: border }]}>
-        <View style={styles.rowTop}>
-          <ThemedText type="smallBold">{order.name}</ThemedText>
-          <ThemedText type="smallBold">{formatMoney(order.totalPrice)}</ThemedText>
-        </View>
-        <ThemedText type="small" themeColor="textSecondary">
-          {formatDate(order.processedAt)}
-          {order.financialStatus ? `  ·  ${humanize(order.financialStatus)}` : ''}
-        </ThemedText>
-        {summary ? (
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
-            {summary}
-          </ThemedText>
-        ) : null}
-      </Pressable>
-    </Link>
-  );
-}
-
-export function humanize(s: string) {
-  return s
-    .toLowerCase()
-    .replace(/_/g, ' ')
-    .replace(/^\w/, (c) => c.toUpperCase());
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  list: { padding: Spacing.three, gap: Spacing.two },
-  row: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.md,
-    padding: Spacing.three,
-    gap: Spacing.half,
-  },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  list: { padding: Spacing.three, gap: Spacing.two, flexGrow: 1 },
+  footer: { gap: Spacing.two, paddingVertical: Spacing.two },
 });

@@ -1,114 +1,164 @@
 import * as Linking from 'expo-linking';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { LoadingState } from '@/components/screen-state';
-import { Brand, Fonts, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  AccountMenuRow,
+  AppButton,
+  AppSurface,
+  AppText,
+  StateView,
+  StatusBadge,
+} from '@/components/ui';
+import { Spacing } from '@/constants/theme';
 import {
   getPushPermission,
   isPushConfigured,
   requestPushPermission,
 } from '@/notifications/onesignal';
 import { useAuth } from '@/shopify/auth';
+import { isCustomerAccountConfigured } from '@/shopify/env';
 import { useShop } from '@/shopify/hooks';
+import { safeHttpUrl } from '@/shopify/order-presentation';
 
-const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim();
-const ABOUT_URL = process.env.EXPO_PUBLIC_ABOUT_URL?.trim();
+const supportEmail = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() ?? '';
+const aboutUrl = safeHttpUrl(process.env.EXPO_PUBLIC_ABOUT_URL?.trim());
+const safeSupportEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportEmail) ? supportEmail : null;
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
-  const { ready, isAuthenticated, customer, signIn, signOut } = useAuth();
+  const auth = useAuth();
   const shop = useShop();
-  const [busy, setBusy] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
-  if (!ready) return <LoadingState />;
+  if (!auth.ready) return <StateView mode="loading" title="Loading account…" />;
 
-  const handleSignIn = async () => {
-    setBusy(true);
+  const signIn = async () => {
+    setSigningIn(true);
     try {
-      await signIn();
-    } catch (e) {
-      Alert.alert('Sign in', (e as Error).message);
+      await auth.signIn();
+    } catch (error) {
+      Alert.alert('Sign in', (error as Error).message);
     } finally {
-      setBusy(false);
+      setSigningIn(false);
     }
   };
 
-  const greeting = customer?.firstName
-    ? `Hi, ${customer.firstName}`
-    : (customer?.emailAddress ?? 'Signed in');
+  const confirmSignOut = () => {
+    Alert.alert(
+      'Sign out?',
+      'Your customer data will be removed from this device. Your shopping cart stays available.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: () => {
+            setSigningOut(true);
+            void auth.signOut().catch((error) => {
+              Alert.alert('Couldn’t sign out', (error as Error).message);
+              setSigningOut(false);
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  const name = [auth.customer?.firstName, auth.customer?.lastName].filter(Boolean).join(' ');
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{
-          paddingTop: insets.top + Spacing.three,
-          paddingHorizontal: Spacing.three,
-          paddingBottom: Spacing.six,
-          gap: Spacing.three,
-        }}>
-        <ThemedText type="title">Account</ThemedText>
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.six },
+        ]}>
+        <AppText variant="title">Account</AppText>
 
-        {isAuthenticated ? (
-          <>
-            <ThemedText>{greeting}</ThemedText>
-            <MenuLink href="/account/orders" label="Orders" hint="Order history & tracking" />
-            <MenuLink
-              href="/account/addresses"
-              label="Addresses"
-              hint="Saved shipping addresses"
-            />
-            <Pressable onPress={signOut} style={styles.link}>
-              <ThemedText type="link">Sign out</ThemedText>
-            </Pressable>
-          </>
+        {auth.isAuthenticated ? (
+          <AppSurface variant="raised" style={styles.identity}>
+            <View style={styles.identityHeader}>
+              <AppText variant="heading">{name || 'Your account'}</AppText>
+              <StatusBadge label="Signed in" tone="success" />
+            </View>
+            {auth.customer?.emailAddress ? (
+              <AppText tone="textSecondary">{auth.customer.emailAddress}</AppText>
+            ) : null}
+            {auth.customerProfileStatus === 'loading' ? (
+              <AppText variant="caption" tone="textSecondary">Refreshing profile…</AppText>
+            ) : null}
+            {auth.customerProfileStatus === 'error' ? (
+              <View style={styles.profileError}>
+                <AppText tone="sale">{auth.customerProfileError}</AppText>
+                <AppButton
+                  label="Retry customer profile"
+                  variant="secondary"
+                  onPress={() => void auth.retryCustomerProfile().catch(() => undefined)}
+                />
+              </View>
+            ) : null}
+          </AppSurface>
+        ) : isCustomerAccountConfigured ? (
+          <AppSurface variant="muted" style={styles.identity}>
+            <AppText variant="heading">Sign in for order details</AppText>
+            <AppText tone="textSecondary">
+              View orders, track shipments, and see saved addresses tied to your Shopify account.
+            </AppText>
+            <AppButton label="Sign in" loading={signingIn} onPress={() => void signIn()} />
+          </AppSurface>
         ) : (
-          <View style={{ gap: Spacing.three }}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Sign in to see your orders, track shipments, and check out faster.
-            </ThemedText>
-            <Pressable
-              onPress={handleSignIn}
-              disabled={busy}
-              style={[styles.primaryBtn, busy && { opacity: 0.6 }]}>
-              <ThemedText style={styles.primaryText}>
-                {busy ? 'Opening…' : 'Sign in'}
-              </ThemedText>
-            </Pressable>
-          </View>
+          <AppSurface variant="muted" style={styles.identity}>
+            <AppText variant="heading">Customer accounts are optional</AppText>
+            <AppText tone="textSecondary">
+              Add the Customer Account API settings to enable sign-in, orders, and addresses.
+            </AppText>
+          </AppSurface>
         )}
 
-        {(SUPPORT_EMAIL || ABOUT_URL || isPushConfigured) && (
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-        )}
-        {isPushConfigured ? <NotificationsRow /> : null}
-        {SUPPORT_EMAIL ? (
-          <Pressable
-            onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
-            style={styles.menuItem}>
-            <ThemedText>Contact support</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {SUPPORT_EMAIL}
-            </ThemedText>
-          </Pressable>
+        {auth.isAuthenticated ? (
+          <AppSurface variant="raised" style={styles.menu}>
+            <Link href="/account/orders" asChild>
+              <AccountMenuRow label="Orders" detail="History, shipments, tracking, and totals" />
+            </Link>
+            <Link href="/account/addresses" asChild>
+              <AccountMenuRow label="Addresses" detail="View saved shipping addresses" />
+            </Link>
+          </AppSurface>
         ) : null}
-        {ABOUT_URL ? (
-          <Pressable
-            onPress={() => Linking.openURL(ABOUT_URL)}
-            style={styles.menuItem}>
-            <ThemedText>
-              {shop.data?.name ? `About ${shop.data.name}` : 'About'}
-            </ThemedText>
-          </Pressable>
+
+        {(isPushConfigured || safeSupportEmail || aboutUrl) ? (
+          <AppSurface variant="raised" style={styles.menu}>
+            {isPushConfigured ? <NotificationsRow /> : null}
+            {safeSupportEmail ? (
+              <AccountMenuRow
+                label="Contact support"
+                detail={safeSupportEmail}
+                onPress={() => void Linking.openURL(`mailto:${safeSupportEmail}`)}
+              />
+            ) : null}
+            {aboutUrl ? (
+              <AccountMenuRow
+                label={shop.data?.name ? `About ${shop.data.name}` : 'About'}
+                onPress={() => void Linking.openURL(aboutUrl)}
+              />
+            ) : null}
+          </AppSurface>
+        ) : null}
+
+        {auth.isAuthenticated ? (
+          <AppButton
+            label="Sign out"
+            variant="danger"
+            loading={signingOut}
+            onPress={confirmSignOut}
+          />
         ) : null}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -116,63 +166,39 @@ function NotificationsRow() {
   const [granted, setGranted] = useState<boolean | null>(null);
 
   useEffect(() => {
-    let alive = true;
-    getPushPermission().then((v) => {
-      if (alive) setGranted(v);
+    let active = true;
+    void getPushPermission().then((value) => {
+      if (active) setGranted(value);
     });
-    return () => {
-      alive = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const enable = async () => {
-    const ok = await requestPushPermission();
-    setGranted(ok);
-    if (!ok) {
+    const allowed = await requestPushPermission();
+    setGranted(allowed);
+    if (!allowed) {
       Alert.alert(
-        'Notifications',
-        'Turn on notifications for this app in your device Settings to get order updates.',
+        'Notifications are off',
+        'Open this app in device Settings to enable order updates.',
       );
     }
   };
 
   return (
-    <Pressable onPress={enable} disabled={granted === true} style={styles.menuItem}>
-      <ThemedText>Push notifications</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {granted === true
-          ? 'On — order updates and offers'
-          : 'Tap to turn on order updates and offers'}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
-function MenuLink({ href, label, hint }: { href: string; label: string; hint?: string }) {
-  return (
-    <Link href={href as never} asChild>
-      <Pressable style={styles.menuItem}>
-        <ThemedText>{label}</ThemedText>
-        {hint ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {hint}
-          </ThemedText>
-        ) : null}
-      </Pressable>
-    </Link>
+    <AccountMenuRow
+      label="Order notifications"
+      detail={granted === null ? 'Checking permission…' : granted ? 'Enabled' : 'Disabled'}
+      disabled={granted === true}
+      onPress={() => void enable()}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  primaryBtn: {
-    backgroundColor: Brand.primary,
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  primaryText: { color: Brand.onPrimary, fontFamily: Fonts.bold, fontSize: 16 },
-  menuItem: { paddingVertical: Spacing.two, gap: 2 },
-  link: { paddingVertical: Spacing.two },
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.two },
+  content: { paddingHorizontal: Spacing.three, gap: Spacing.three },
+  identity: { padding: Spacing.three, gap: Spacing.two },
+  identityHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
+  profileError: { gap: Spacing.two },
+  menu: { paddingHorizontal: Spacing.three, overflow: 'hidden' },
 });
