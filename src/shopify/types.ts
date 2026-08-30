@@ -50,7 +50,7 @@ export interface Product extends ProductCard {
   descriptionHtml: string;
   images: { nodes: ShopImage[] };
   options: ProductOption[];
-  variants: { nodes: ProductVariant[] };
+  variants: Connection<ProductVariant>;
   tags: string[];
 }
 
@@ -65,6 +65,26 @@ export interface CollectionCard {
 export interface Connection<T> {
   nodes: T[];
   pageInfo: PageInfo;
+}
+
+export type ProductFilterInput = Record<string, unknown>;
+
+export interface ProductFilterValue {
+  id: string;
+  label: string;
+  count: number;
+  input: ProductFilterInput;
+}
+
+export interface ProductFilter {
+  id: string;
+  label: string;
+  type: 'BOOLEAN' | 'LIST' | 'PRICE_RANGE';
+  values: ProductFilterValue[];
+}
+
+export interface ProductConnection<T> extends Connection<T> {
+  filters: ProductFilter[];
 }
 
 /* ---- Cart ---- */
@@ -87,6 +107,7 @@ export interface Cart {
   id: string;
   checkoutUrl: string;
   totalQuantity: number;
+  buyerIdentity?: { email: string | null } | null;
   cost: {
     subtotalAmount: Money;
     totalAmount: Money;
@@ -101,3 +122,10 @@ export type ProductSortKey =
   | 'CREATED'
   | 'TITLE'
   | 'RELEVANCE';
+
+export type CollectionSortKey =
+  | 'COLLECTION_DEFAULT'
+  | 'BEST_SELLING'
+  | 'PRICE'
+  | 'CREATED'
+  | 'TITLE';

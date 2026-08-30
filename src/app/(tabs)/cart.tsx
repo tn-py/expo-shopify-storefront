@@ -1,207 +1,349 @@
-import { Image } from 'expo-image';
-import { Link } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { EmptyState, LoadingState } from '@/components/screen-state';
-import { Brand, Fonts, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  AppButton,
+  AppSurface,
+  AppText,
+  Price,
+  QuantityStepper,
+  RemoteImage,
+  StateView,
+  StickyActionBar,
+} from '@/components/ui';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
 import { useCart } from '@/shopify/cart';
+import type { CartOperationStatus } from '@/shopify/cart-operations';
 import { useCheckout } from '@/shopify/checkout';
 import type { CartLine } from '@/shopify/types';
 
+type RetryRequest =
+  | { kind: 'update'; quantity: number }
+  | { kind: 'remove' };
+
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
-  const { cart, ready, busy, updateLine, removeLine } = useCart();
-  const { canCheckout, startCheckout } = useCheckout();
+  const router = useRouter();
+  const {
+    cart,
+    ready,
+    operations,
+    lastRemovedLine,
+    updateLine,
+    removeLine,
+    undoRemove,
+    clearOperationError,
+    buyerIdentityError,
+    buyerIdentityErrorKind,
+    retryBuyerIdentity,
+  } = useCart();
+  const { canCheckout, startCheckout, presenting, error: checkoutError, recovered } = useCheckout();
+  const [retryByLine, setRetryByLine] = useState<Record<string, RetryRequest>>({});
 
-  if (!ready) return <LoadingState />;
+  const retryCheckoutIdentity = async () => {
+    try {
+      await retryBuyerIdentity();
+    } catch {
+      // The cart identity state keeps actionable feedback visible.
+    }
+  };
+
+  const undo = async () => {
+    clearOperationError('undo');
+    try {
+      await undoRemove();
+    } catch {
+      // Operation-specific feedback is rendered from the cart context.
+    }
+  };
+
+  if (!ready) return <StateView mode="loading" title="Loading your cart…" />;
   if (!cart || cart.totalQuantity === 0) {
     return (
-      <EmptyState
-        title="Your cart is empty"
-        subtitle="Browse the catalog and add items to get started."
-      />
+      <AppSurface style={styles.container}>
+        <View style={[styles.emptyContent, { paddingBottom: insets.bottom + Spacing.three }]}>
+          <StateView
+            mode="empty"
+            title="Your cart is empty"
+            message="Explore the shop and add something made for everyday use."
+            actionLabel="Browse products"
+            onAction={() => router.push('/shop')}
+          />
+          <RemovalFeedback
+            line={lastRemovedLine}
+            pending={operations.undo?.pending}
+            error={operations.undo?.error}
+            onUndo={undo}
+          />
+        </View>
+      </AppSurface>
     );
   }
 
+  const runRequest = async (line: CartLine, request: RetryRequest) => {
+    const key = `line:${line.id}`;
+    clearOperationError(key);
+    try {
+      if (request.kind === 'remove') await removeLine(line.id);
+      else await updateLine(line.id, request.quantity);
+      setRetryByLine((current) => {
+        const next = { ...current };
+        delete next[line.id];
+        return next;
+      });
+    } catch {
+      setRetryByLine((current) => ({ ...current, [line.id]: request }));
+    }
+  };
+
   return (
-    <ThemedView style={styles.container}>
+    <AppSurface style={styles.container}>
       <ScrollView
-        contentContainerStyle={{
-          paddingTop: insets.top + Spacing.three,
-          paddingHorizontal: Spacing.three,
-          paddingBottom: Spacing.six,
-        }}>
-        <ThemedText type="title" style={styles.title}>
-          Cart
-        </ThemedText>
-
-        {cart.lines.nodes.map((line) => (
-          <LineRow
-            key={line.id}
-            line={line}
-            disabled={busy}
-            onInc={() => updateLine(line.id, line.quantity + 1)}
-            onDec={() =>
-              line.quantity <= 1
-                ? removeLine(line.id)
-                : updateLine(line.id, line.quantity - 1)
-            }
-            onRemove={() => removeLine(line.id)}
-          />
-        ))}
-
-        <View style={[styles.summary, { borderTopColor: theme.backgroundElement }]}>
-          <Row label="Subtotal" value={formatMoney(cart.cost.subtotalAmount)} />
-          {cart.cost.totalTaxAmount ? (
-            <Row label="Tax" value={formatMoney(cart.cost.totalTaxAmount)} />
-          ) : null}
-          <Row label="Total" value={formatMoney(cart.cost.totalAmount)} bold />
-          <ThemedText type="small" themeColor="textSecondary">
-            Shipping and discounts are calculated at checkout.
-          </ThemedText>
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 156 + insets.bottom }]}>
+        <View style={styles.heading}>
+          <AppText variant="title">Your cart</AppText>
+          <AppText tone="textSecondary">
+            {cart.totalQuantity} {cart.totalQuantity === 1 ? 'item' : 'items'}
+          </AppText>
         </View>
+
+        <RemovalFeedback
+          line={lastRemovedLine}
+          pending={operations.undo?.pending}
+          error={operations.undo?.error}
+          onUndo={undo}
+        />
+
+        <View style={styles.lines}>
+          {cart.lines.nodes.map((line) => (
+            <CartLineRow
+              key={line.id}
+              line={line}
+              operation={operations[`line:${line.id}`]}
+              retry={retryByLine[line.id]}
+              onRequest={(request) => runRequest(line, request)}
+            />
+          ))}
+        </View>
+
+        <AppSurface variant="muted" style={styles.summary}>
+          <SummaryRow label="Subtotal" value={formatMoney(cart.cost.subtotalAmount)} />
+          <SummaryRow label="Estimated total" value={formatMoney(cart.cost.totalAmount)} strong />
+          <AppText variant="caption" tone="textSecondary">
+            Taxes, shipping, and discounts are finalized in Shopify Checkout.
+          </AppText>
+        </AppSurface>
+
+        <View style={styles.reassurance}>
+          <AppText variant="labelStrong">Checkout you can trust</AppText>
+          <AppText tone="textSecondary">
+            Payment is completed securely in Shopify Checkout. You can review delivery,
+            returns, discounts, and the final total before placing your order.
+          </AppText>
+        </View>
+
+        {buyerIdentityError ? (
+          <AppSurface accessibilityRole="alert" variant="muted" style={styles.errorBox}>
+            <AppText variant="labelStrong">Checkout identity needs attention</AppText>
+            <AppText tone="sale">{buyerIdentityError}</AppText>
+            <AppButton
+              label={
+                buyerIdentityErrorKind === 'profile'
+                  ? 'Retry customer profile'
+                  : 'Retry checkout setup'
+              }
+              variant="secondary"
+              loading={operations.buyerIdentity?.pending}
+              onPress={() => { void retryCheckoutIdentity(); }}
+            />
+          </AppSurface>
+        ) : null}
+
+        {checkoutError ? (
+          <AppSurface accessibilityRole="alert" variant="muted" style={styles.errorBox}>
+            <AppText variant="labelStrong">{recovered ? 'Cart refreshed' : 'Checkout needs attention'}</AppText>
+            <AppText tone={recovered ? 'textSecondary' : 'sale'}>{checkoutError}</AppText>
+          </AppSurface>
+        ) : null}
       </ScrollView>
 
-      <View
-        style={[
-          styles.footer,
-          { paddingBottom: insets.bottom + Spacing.two, backgroundColor: theme.background },
-        ]}>
-        <Pressable
-          onPress={startCheckout}
-          disabled={!canCheckout || busy}
-          style={[styles.checkoutBtn, (!canCheckout || busy) && { opacity: 0.5 }]}>
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText style={styles.checkoutText}>
-              Checkout · {formatMoney(cart.cost.totalAmount)}
-            </ThemedText>
-          )}
-        </Pressable>
-      </View>
-    </ThemedView>
+      <StickyActionBar style={{ paddingBottom: insets.bottom + Spacing.two }}>
+        <View style={styles.stickyContent}>
+          <View style={styles.stickyTotal}>
+            <AppText variant="caption" tone="textSecondary">Estimated total</AppText>
+            <Price
+              amount={cart.cost.totalAmount.amount}
+              currencyCode={cart.cost.totalAmount.currencyCode}
+            />
+          </View>
+          <View style={styles.checkoutAction}>
+            <AppButton
+              label={`Checkout · ${formatMoney(cart.cost.totalAmount)}`}
+              loading={presenting}
+              disabled={!canCheckout}
+              onPress={startCheckout}
+            />
+          </View>
+        </View>
+      </StickyActionBar>
+    </AppSurface>
   );
 }
 
-function LineRow({
+function RemovalFeedback({
   line,
-  disabled,
-  onInc,
-  onDec,
-  onRemove,
+  pending,
+  error,
+  onUndo,
 }: {
-  line: CartLine;
-  disabled: boolean;
-  onInc: () => void;
-  onDec: () => void;
-  onRemove: () => void;
+  line: CartLine | null;
+  pending?: boolean;
+  error?: string | null;
+  onUndo: () => void;
 }) {
-  const theme = useTheme();
-  const m = line.merchandise;
-  const variantLabel = m.selectedOptions
-    .filter((o) => o.value !== 'Default Title')
-    .map((o) => o.value)
-    .join(' · ');
-
+  if (!line) return null;
   return (
-    <View style={styles.line}>
-      <Link href={`/product/${m.product.handle}`} asChild>
-        <Pressable
-          style={() => [styles.lineImage, { backgroundColor: theme.backgroundElement }]}>
-          {m.image ? (
-            <Image source={{ uri: m.image.url }} style={{ flex: 1 }} contentFit="contain" />
-          ) : null}
-        </Pressable>
-      </Link>
-      <View style={styles.lineBody}>
-        <ThemedText type="small" numberOfLines={2}>
-          {m.product.title}
-        </ThemedText>
-        {variantLabel ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {variantLabel}
-          </ThemedText>
-        ) : null}
-        <ThemedText type="smallBold">{formatMoney(line.cost.totalAmount)}</ThemedText>
-
-        <View style={styles.qtyRow}>
-          <Stepper label="−" onPress={onDec} disabled={disabled} />
-          <ThemedText type="small">{line.quantity}</ThemedText>
-          <Stepper label="+" onPress={onInc} disabled={disabled} />
-          <Pressable onPress={onRemove} disabled={disabled} style={styles.remove}>
-            <ThemedText type="link">Remove</ThemedText>
-          </Pressable>
+    <View style={styles.removalFeedback}>
+      <AppSurface accessibilityRole="alert" variant="muted" style={styles.feedback}>
+        <View style={styles.feedbackCopy}>
+          <AppText variant="labelStrong">Item removed</AppText>
+          <AppText variant="caption" tone="textSecondary" numberOfLines={1}>
+            {line.merchandise.product.title}
+          </AppText>
         </View>
-      </View>
+        <AppButton
+          label="Undo remove"
+          variant="secondary"
+          loading={pending}
+          onPress={onUndo}
+        />
+      </AppSurface>
+      {error ? (
+        <AppSurface accessibilityRole="alert" variant="muted" style={styles.errorBox}>
+          <AppText tone="sale">{error}</AppText>
+          <AppButton label="Try undo again" variant="secondary" onPress={onUndo} />
+        </AppSurface>
+      ) : null}
     </View>
   );
 }
 
-function Stepper({
-  label,
-  onPress,
-  disabled,
+function CartLineRow({
+  line,
+  operation,
+  retry,
+  onRequest,
 }: {
-  label: string;
-  onPress: () => void;
-  disabled: boolean;
+  line: CartLine;
+  operation?: CartOperationStatus;
+  retry?: RetryRequest;
+  onRequest: (request: RetryRequest) => Promise<void>;
 }) {
-  const theme = useTheme();
+  const merchandise = line.merchandise;
+  const [optimisticQuantity, setOptimisticQuantity] = useState<number | null>(null);
+  const displayedQuantity = optimisticQuantity ?? line.quantity;
+  const variantLabel = merchandise.selectedOptions
+    .filter((option) => option.value !== 'Default Title')
+    .map((option) => option.value)
+    .join(' · ');
+
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.stepper, { borderColor: theme.backgroundSelected }]}>
-      <ThemedText>{label}</ThemedText>
-    </Pressable>
+    <AppSurface variant="raised" style={styles.line}>
+      <Link href={`/product/${merchandise.product.handle}`} asChild>
+        <Pressable accessibilityRole="link" accessibilityLabel={merchandise.product.title} style={styles.imageLink}>
+          <RemoteImage
+            uri={merchandise.image?.url}
+            alt={merchandise.image?.altText ?? merchandise.product.title}
+            contentFit="contain"
+            style={styles.image}
+          />
+        </Pressable>
+      </Link>
+      <View style={styles.lineBody}>
+        <View style={styles.lineIdentity}>
+          <AppText variant="labelStrong" numberOfLines={2}>{merchandise.product.title}</AppText>
+          {variantLabel ? <AppText variant="caption" tone="textSecondary">{variantLabel}</AppText> : null}
+          <Price
+            amount={line.cost.totalAmount.amount}
+            currencyCode={line.cost.totalAmount.currencyCode}
+          />
+        </View>
+        <View style={styles.lineActions}>
+          <QuantityStepper
+            value={displayedQuantity}
+            busy={operation?.pending && operation.kind === 'update'}
+            disabled={operation?.pending && operation.kind === 'remove'}
+            onChange={(quantity) => {
+              setOptimisticQuantity(quantity);
+              void onRequest({ kind: 'update', quantity })
+                .finally(() => setOptimisticQuantity(null));
+            }}
+          />
+          <View style={styles.removeAction}>
+            <AppButton
+              label="Remove"
+              accessibilityLabel={`Remove ${merchandise.product.title}`}
+              variant="tertiary"
+              loading={operation?.pending && operation.kind === 'remove'}
+              disabled={operation?.pending}
+              onPress={() => { void onRequest({ kind: 'remove' }); }}
+            />
+          </View>
+        </View>
+        {operation?.error ? (
+          <View accessibilityRole="alert" style={styles.lineError}>
+            <AppText variant="caption" tone="sale">{operation.error}</AppText>
+            {retry ? (
+              <AppButton label="Try again" variant="secondary" onPress={() => { void onRequest(retry); }} />
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </AppSurface>
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <View style={styles.summaryRow}>
-      <ThemedText type={bold ? 'smallBold' : 'small'}>{label}</ThemedText>
-      <ThemedText type={bold ? 'smallBold' : 'small'}>{value}</ThemedText>
+      <AppText variant={strong ? 'labelStrong' : 'label'}>{label}</AppText>
+      <AppText variant={strong ? 'price' : 'label'}>{value}</AppText>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  title: { marginBottom: Spacing.three },
-  line: { flexDirection: 'row', gap: Spacing.three, paddingVertical: Spacing.three },
-  lineImage: { width: 72, height: 72, borderRadius: Spacing.two, overflow: 'hidden' },
-  lineBody: { flex: 1, gap: 4 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.one },
-  stepper: {
-    width: 32,
-    height: 32,
-    borderRadius: Spacing.one,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
+  container: { flex: 1, borderRadius: 0 },
+  emptyContent: { flex: 1, gap: Spacing.three, paddingHorizontal: Spacing.three },
+  scrollContent: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    gap: Spacing.four,
+    padding: Spacing.three,
   },
-  remove: { marginLeft: 'auto' },
-  summary: { marginTop: Spacing.three, paddingTop: Spacing.three, borderTopWidth: 1, gap: Spacing.two },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  footer: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(128,128,128,0.2)',
-  },
-  checkoutBtn: {
-    backgroundColor: Brand.primary,
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  checkoutText: { color: '#fff', fontFamily: Fonts.bold, fontSize: 16 },
+  heading: { gap: Spacing.one },
+  lines: { gap: Spacing.three },
+  line: { flexDirection: 'row', gap: Spacing.three, padding: Spacing.three },
+  imageLink: { width: 96, minHeight: 112 },
+  image: { width: 96, height: 112, borderRadius: 10 },
+  lineBody: { flex: 1, gap: Spacing.three },
+  lineIdentity: { gap: Spacing.one },
+  lineActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
+  removeAction: { minWidth: 96, marginLeft: 'auto' },
+  lineError: { gap: Spacing.two },
+  feedback: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.three },
+  feedbackCopy: { flex: 1 },
+  removalFeedback: { gap: Spacing.two },
+  summary: { gap: Spacing.two, padding: Spacing.three },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.three },
+  reassurance: { gap: Spacing.two },
+  errorBox: { gap: Spacing.two, padding: Spacing.three },
+  stickyContent: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  stickyTotal: { flex: 0.85 },
+  checkoutAction: { flex: 1.4 },
 });

@@ -1,63 +1,20 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-
-import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { StateView } from '@/components/ui/state-view';
 
 export function LoadingState({ label }: { label?: string }) {
-  return (
-    <View style={styles.center}>
-      <ActivityIndicator />
-      {label ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {label}
-        </ThemedText>
-      ) : null}
-    </View>
-  );
+  return <StateView mode="loading" title={label} />;
 }
 
-export function ErrorState({
-  message,
-  onRetry,
-}: {
-  message?: string;
-  onRetry?: () => void;
-}) {
+export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
   return (
-    <View style={styles.center}>
-      <ThemedText type="subtitle">Something went wrong</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-        {message ?? 'Please check your connection and try again.'}
-      </ThemedText>
-      {onRetry ? (
-        <ThemedText type="link" onPress={onRetry}>
-          Retry
-        </ThemedText>
-      ) : null}
-    </View>
+    <StateView
+      mode="error"
+      message={message ?? 'Please check your connection and try again.'}
+      actionLabel={onRetry ? 'Retry' : undefined}
+      onAction={onRetry}
+    />
   );
 }
 
 export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <View style={styles.center}>
-      <ThemedText type="subtitle">{title}</ThemedText>
-      {subtitle ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-          {subtitle}
-        </ThemedText>
-      ) : null}
-    </View>
-  );
+  return <StateView mode="empty" title={title} message={subtitle} />;
 }
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    padding: Spacing.four,
-  },
-  centerText: { textAlign: 'center' },
-});

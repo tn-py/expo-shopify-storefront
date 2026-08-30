@@ -33,8 +33,9 @@ npm start
 - **Native checkout** — `@shopify/checkout-sheet-kit` with preloading; `completed`
   event clears the cart and routes to an order-confirmed screen.
 - **Customer accounts** *(optional)* — Customer Account API OAuth 2.0 + PKCE,
-  tokens in `expo-secure-store`, silent refresh; Orders, Order detail and
-  Addresses screens.
+  tokens in `expo-secure-store`, silent refresh, session-isolated caches;
+  paginated Orders, shipment/tracking detail, and view-only Addresses with a
+  configured hosted-management handoff.
 - **Deep links** — custom scheme out of the box; storefront `https://` links
   (`/products/…`, `/collections/…`, `/search`) rewritten to app routes; App Links
   / Universal Links ready when you add your domain.
@@ -43,8 +44,8 @@ npm start
 - **Push notifications** *(optional)* — OneSignal; signed-in shoppers linked to
   their Shopify customer id, notification taps deep-linked to the right screen.
   No-ops with no app id.
-- **Theming** — light / dark / system, accent colours from `.env`, Montserrat
-  type scale, shared design tokens.
+- **Native UI foundation** — HeroUI Native + Uniwind, app-owned commerce
+  primitives, platform system typography, and light / dark / system theming.
 - **DX** — TypeScript strict, Expo Router typed routes, React Compiler,
   React Query, ESLint, `expo-doctor`, CI workflow.
 
@@ -62,6 +63,7 @@ _Add screenshots to `docs/media/` and link them here (see `docs/media/README.md`
 | Checkout | `@shopify/checkout-sheet-kit` |
 | Accounts | Shopify Customer Account API + `expo-auth-session` (PKCE) |
 | Server state | `@tanstack/react-query` |
+| UI | HeroUI Native + Uniwind, consumed through app-owned primitives |
 | Storage | `@react-native-async-storage/async-storage`, `expo-secure-store` |
 | Analytics | `posthog-react-native` (optional) |
 | Push | `react-native-onesignal` + `onesignal-expo-plugin` (optional) |
@@ -101,6 +103,7 @@ Full variable reference is in [`.env.example`](.env.example); the highlights:
 | `EXPO_PUBLIC_APP_COLOR_SCHEME` | `light` \| `dark` \| `system` | `system` |
 | `EXPO_PUBLIC_APP_BACKGROUND` | Splash + adaptive-icon background | `#ffffff` |
 | `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` / `_API_URL` | Enable customer accounts | *(off)* |
+| `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL` | Hosted address-management handoff | *(off)* |
 | `EXPO_PUBLIC_SUPPORT_EMAIL` / `EXPO_PUBLIC_ABOUT_URL` | Account-screen links | *(hidden)* |
 | `EXPO_PUBLIC_POSTHOG_KEY` / `_HOST` | Analytics | *(off)* |
 | `EXPO_PUBLIC_ONESIGNAL_APP_ID` | Push notifications (OneSignal) | *(off)* |
@@ -132,7 +135,7 @@ Each is off until you set its env var(s); the app runs fine without any of them.
 
 | Integration | Set in `.env` | Needs a rebuild? | Guide |
 | --- | --- | --- | --- |
-| **Customer accounts** — sign-in, orders, addresses | `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID`, `_API_URL` | no | [customer-accounts.md](docs/customer-accounts.md) |
+| **Customer accounts** — sign-in, orders, addresses | `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID`, `_API_URL`, optional `_MANAGE_URL` | no | [customer-accounts.md](docs/customer-accounts.md) |
 | **Universal / App Links** — `https://` links open the app | `EXPO_PUBLIC_APP_UNIVERSAL_LINK_DOMAINS` | yes | [deep-links.md](docs/deep-links.md) |
 | **Analytics** — PostHog | `EXPO_PUBLIC_POSTHOG_KEY`, `_HOST` | no | — |
 | **Push notifications** — OneSignal | `EXPO_PUBLIC_ONESIGNAL_APP_ID`, `EXPO_PUBLIC_ONESIGNAL_IOS_MODE` | yes | [push-notifications.md](docs/push-notifications.md) |
@@ -169,7 +172,7 @@ src/
     auth.tsx              Customer Account API OAuth (PKCE)
     customer.ts           orders / order / addresses queries + hooks
     env.ts / types.ts
-  components/             ProductCard · ScreenState · SetupRequired · themed primitives
+  components/             ProductCard · ScreenState · SetupRequired · ui commerce primitives
   notifications/          OneSignal push: init, identity sync, deep-linked taps
   constants/theme.ts      Design tokens (colours from .env)
   hooks/ · lib/           theme resolution · analytics · deep-link normaliser · query client
@@ -182,6 +185,7 @@ docs/                     shopify-setup · deep-links · customer-accounts · pu
 - [Customer accounts](docs/customer-accounts.md) — Customer Account API + callback URI
 - [Deep links & universal links](docs/deep-links.md) — schemes, App Links, `.well-known` files
 - [Push notifications](docs/push-notifications.md) — OneSignal setup, identity, deep-linked taps
+- [Manual QA](docs/manual-qa.md) — iOS/Android visual, commerce, privacy, and accessibility checklist
 
 ## Building for release
 
@@ -199,11 +203,13 @@ Version and build numbers auto-increment on the `production` profile
 ```sh
 npm run typecheck        # tsc --noEmit
 npm run lint             # expo lint
+npm test                 # Jest Expo + React Native Testing Library
 npm run doctor           # expo-doctor
 npx expo export --platform android   # full bundle smoke test
+npx expo export --platform ios       # full bundle smoke test
 ```
 
-CI runs the first three on every push and PR (`.github/workflows/ci.yml`).
+CI runs typecheck, lint, the Jest suite, and Expo Doctor on every push to `main` and every PR (`.github/workflows/ci.yml`).
 
 ## Roadmap
 

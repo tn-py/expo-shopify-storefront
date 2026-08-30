@@ -1,79 +1,25 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { type TextProps } from 'react-native';
 
-import { Fonts, ThemeColor } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { AppText, type AppTextProps } from '@/components/ui/app-text';
+import { type ThemeColor } from '@/constants/theme';
 
 export type ThemedTextProps = TextProps & {
   type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
   themeColor?: ThemeColor;
 };
 
-export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
-  const theme = useTheme();
-  const color =
-    themeColor != null
-      ? theme[themeColor]
-      : type === 'link' || type === 'linkPrimary'
-        ? theme.primary
-        : theme.text;
+const variants: Record<NonNullable<ThemedTextProps['type']>, AppTextProps['variant']> = {
+  default: 'body',
+  title: 'title',
+  small: 'caption',
+  smallBold: 'captionStrong',
+  subtitle: 'heading',
+  link: 'labelStrong',
+  linkPrimary: 'labelStrong',
+  code: 'code',
+};
 
-  return (
-    <Text
-      style={[
-        { color },
-        type === 'default' && styles.default,
-        type === 'title' && styles.title,
-        type === 'small' && styles.small,
-        type === 'smallBold' && styles.smallBold,
-        type === 'subtitle' && styles.subtitle,
-        type === 'link' && styles.link,
-        type === 'linkPrimary' && styles.linkPrimary,
-        type === 'code' && styles.code,
-        style,
-      ]}
-      {...rest}
-    />
-  );
+export function ThemedText({ type = 'default', themeColor, ...rest }: ThemedTextProps) {
+  const tone = themeColor ?? (type === 'link' || type === 'linkPrimary' ? 'primary' : 'text');
+  return <AppText variant={variants[type]} tone={tone} {...rest} />;
 }
-
-const styles = StyleSheet.create({
-  small: {
-    fontFamily: Fonts.regular,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  smallBold: {
-    fontFamily: Fonts.bold,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  default: {
-    fontFamily: Fonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  title: {
-    fontFamily: Fonts.bold,
-    fontSize: 26,
-    lineHeight: 32,
-  },
-  subtitle: {
-    fontFamily: Fonts.semibold,
-    fontSize: 19,
-    lineHeight: 26,
-  },
-  link: {
-    fontFamily: Fonts.semibold,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  linkPrimary: {
-    fontFamily: Fonts.semibold,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  code: {
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-  },
-});

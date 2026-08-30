@@ -1,78 +1,56 @@
-import { Image } from 'expo-image';
-import { Link } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { CollectionCard, getCatalogColumnCount } from '@/components/commerce';
 import { EmptyState, ErrorState, LoadingState } from '@/components/screen-state';
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { AppSurface, AppText, CatalogGrid } from '@/components/ui';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { screen } from '@/lib/analytics';
 import { useCollections } from '@/shopify/hooks';
 
 export default function ShopScreen() {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const columns = getCatalogColumnCount(width);
   const { data, isPending, isError, error, refetch, isRefetching } = useCollections();
 
-  if (isPending) return <LoadingState />;
+  useEffect(() => screen('Shop'), []);
+
+  if (isPending) return <LoadingState label="Loading collections…" />;
   if (isError) return <ErrorState message={(error as Error).message} onRetry={refetch} />;
-  if (!data?.length) return <EmptyState title="No categories yet" />;
+  if (!data?.length) {
+    return <EmptyState title="No collections yet" subtitle="Please check back soon." />;
+  }
 
   return (
-    <ThemedView style={styles.container}>
-      <FlatList
+    <AppSurface style={styles.container}>
+      <CatalogGrid
+        key={`shop-${columns}`}
+        columns={columns}
         data={data}
-        keyExtractor={(c) => c.id}
         onRefresh={refetch}
         refreshing={isRefetching}
-        contentContainerStyle={{
-          paddingTop: insets.top + Spacing.three,
-          paddingBottom: Spacing.six,
-        }}
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.six },
+        ]}
+        columnWrapperStyle={styles.row}
         ListHeaderComponent={
-          <ThemedText type="title" style={styles.title}>
-            Shop
-          </ThemedText>
+          <View style={styles.header}>
+            <AppText variant="title">Shop</AppText>
+            <AppText tone="textSecondary">Explore every collection in the catalog.</AppText>
+          </View>
         }
-        renderItem={({ item }) => (
-          <Link href={`/collection/${item.handle}`} asChild>
-            <Pressable style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
-              <View style={[styles.thumb, { backgroundColor: theme.backgroundElement }]}>
-                {item.image ? (
-                  <Image
-                    source={{ uri: item.image.url }}
-                    style={{ flex: 1 }}
-                    contentFit="cover"
-                  />
-                ) : null}
-              </View>
-              <View style={styles.rowText}>
-                <ThemedText numberOfLines={1}>{item.title}</ThemedText>
-                {item.description ? (
-                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
-                    {item.description}
-                  </ThemedText>
-                ) : null}
-              </View>
-            </Pressable>
-          </Link>
-        )}
+        renderItem={({ item }) => <CollectionCard collection={item} />}
       />
-    </ThemedView>
+    </AppSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  title: { paddingHorizontal: Spacing.three, marginBottom: Spacing.three },
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  thumb: { width: 64, height: 64, borderRadius: Spacing.two, overflow: 'hidden' },
-  rowText: { flex: 1, gap: 2 },
+  container: { flex: 1, borderRadius: 0 },
+  list: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', paddingHorizontal: Spacing.two },
+  header: { gap: Spacing.one, paddingHorizontal: Spacing.one, paddingBottom: Spacing.three },
+  row: { alignItems: 'stretch' },
 });

@@ -40,6 +40,7 @@ const CART = `
     id
     checkoutUrl
     totalQuantity
+    buyerIdentity { email }
     cost {
       subtotalAmount { ...Money }
       totalAmount { ...Money }
@@ -108,6 +109,7 @@ export const COLLECTION_QUERY = `
     $after: String
     $sortKey: ProductCollectionSortKeys = COLLECTION_DEFAULT
     $reverse: Boolean = false
+    $filters: [ProductFilter!]
   ) {
     collection(handle: $handle) {
       id
@@ -115,10 +117,27 @@ export const COLLECTION_QUERY = `
       title
       description
       image { ...Image }
-      products(first: $first, after: $after, sortKey: $sortKey, reverse: $reverse) {
+      products(first: $first, after: $after, sortKey: $sortKey, reverse: $reverse, filters: $filters) {
         nodes { ...ProductCard }
         pageInfo { hasNextPage endCursor }
+        filters {
+          id
+          label
+          type
+          values { id label count input }
+        }
       }
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
+  ${PRODUCT_CARD}
+`;
+
+export const PRODUCTS_QUERY = `
+  query Products($first: Int = 24) {
+    products(first: $first, sortKey: BEST_SELLING) {
+      nodes { ...ProductCard }
     }
   }
   ${MONEY}
@@ -146,12 +165,35 @@ export const PRODUCT_QUERY = `
           selectedOptions { name value }
           image { ...Image }
         }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
   ${MONEY}
   ${IMAGE}
   ${PRODUCT_CARD}
+`;
+
+export const PRODUCT_VARIANTS_QUERY = `
+  query ProductVariants($handle: String!, $first: Int = 100, $after: String) {
+    product(handle: $handle) {
+      variants(first: $first, after: $after) {
+        nodes {
+          id
+          title
+          availableForSale
+          sku
+          price { ...Money }
+          compareAtPrice { ...Money }
+          selectedOptions { name value }
+          image { ...Image }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
 `;
 
 export const PREDICTIVE_SEARCH_QUERY = `

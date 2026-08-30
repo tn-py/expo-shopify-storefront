@@ -1,6 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import {
   createContext,
   useCallback,
@@ -14,11 +17,13 @@ import {
 
 import { identify, resetAnalytics, track } from '@/lib/analytics';
 import { identifyPushUser, resetPushUser } from '@/notifications/onesignal';
+import { clearCustomerQueries } from './customer-session';
 import { ShopifyEnv, isCustomerAccountConfigured } from './env';
 
 WebBrowser.maybeCompleteAuthSession();
 
 const TOKEN_KEY = 'storefront.customer.tokens';
+const SIGNED_OUT_TOMBSTONE_KEY = 'storefront.customer.signed-out';
 const SCOPES = ['openid', 'email', 'customer-account-api:full'];
 
 interface StoredTokens {
@@ -36,10 +41,17 @@ export interface CustomerProfile {
   emailAddress: string | null;
 }
 
-interface AuthContextValue {
+export type CustomerProfileStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface AuthContextValue {
   ready: boolean;
   isAuthenticated: boolean;
   customer: CustomerProfile | null;
+  customerProfileStatus: CustomerProfileStatus;
+  customerProfileError: string | null;
+  /** Stable discriminator used by every protected customer query key. */
+  customerSessionKey: string | null;
+  retryCustomerProfile: () => Promise<void>;
   /** Returns a valid access token, refreshing first if it's near expiry. */
   getAccessToken: () => Promise<string | null>;
   signIn: () => Promise<void>;
@@ -60,6 +72,16 @@ const redirectUri = AuthSession.makeRedirectUri({
 });
 
 async function loadTokens(): Promise<StoredTokens | null> {
+  const signedOut = await AsyncStorage.getItem(SIGNED_OUT_TOMBSTONE_KEY);
+  if (signedOut) {
+    try {
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await AsyncStorage.removeItem(SIGNED_OUT_TOMBSTONE_KEY);
+    } catch {
+      // Keep the durable tombstone: persisted credentials remain non-rehydratable.
+    }
+    return null;
+  }
   const raw = await SecureStore.getItemAsync(TOKEN_KEY);
   return raw ? (JSON.parse(raw) as StoredTokens) : null;
 }
@@ -82,10 +104,15 @@ function toStored(r: AuthSession.TokenResponse): StoredTokens {
 const PROFILE_QUERY = `query { customer { id firstName lastName emailAddress { emailAddress } } }`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [tokens, setTokens] = useState<StoredTokens | null>(null);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [ready, setReady] = useState(false);
   const tokensRef = useRef<StoredTokens | null>(null);
+  const [customerProfileStatus, setCustomerProfileStatus] = useState<CustomerProfileStatus>('idle');
+  const [customerProfileError, setCustomerProfileError] = useState<string | null>(null);
+  const profileRequestVersion = useRef(0);
+  const profileAccessToken = useRef<string | null>(null);
 
   useEffect(() => {
     tokensRef.current = tokens;
@@ -95,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const t = await loadTokens();
+        tokensRef.current = t;
         setTokens(t);
       } finally {
         setReady(true);
@@ -102,11 +130,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  const clearCustomerSession = useCallback(async (): Promise<void> => {
+    await AsyncStorage.setItem(SIGNED_OUT_TOMBSTONE_KEY, '1');
+    tokensRef.current = null;
+    let tokenDeletionError: unknown;
+    try {
+      await deleteTokens();
+      await AsyncStorage.removeItem(SIGNED_OUT_TOMBSTONE_KEY);
+    } catch (error) {
+      tokenDeletionError = error;
+    }
+    profileRequestVersion.current += 1;
+    profileAccessToken.current = null;
+    await clearCustomerQueries(queryClient);
+    setTokens(null);
+    setCustomer(null);
+    setCustomerProfileStatus('idle');
+    setCustomerProfileError(null);
+    resetAnalytics();
+    resetPushUser();
+    router.replace('/account');
+    if (tokenDeletionError) throw tokenDeletionError;
+  }, [queryClient]);
+
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     const current = tokensRef.current ?? (await loadTokens());
     if (!current) return null;
     if (Date.now() < current.expiresAt - 60_000) return current.accessToken;
-    if (!current.refreshToken) return current.accessToken; // best effort
+    if (!current.refreshToken) {
+      if (Date.now() < current.expiresAt) return current.accessToken;
+      await clearCustomerSession();
+      return null;
+    }
     try {
       const r = await AuthSession.refreshAsync(
         {
@@ -118,52 +173,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const next = toStored(r);
       next.refreshToken = next.refreshToken ?? current.refreshToken;
       await saveTokens(next);
+      tokensRef.current = next;
       setTokens(next);
       return next.accessToken;
     } catch {
-      await deleteTokens();
-      setTokens(null);
-      setCustomer(null);
+      await clearCustomerSession();
       return null;
+    }
+  }, [clearCustomerSession]);
+
+  const loadCustomerProfile = useCallback(async (token: string): Promise<void> => {
+    const requestVersion = ++profileRequestVersion.current;
+    await Promise.resolve();
+    if (requestVersion !== profileRequestVersion.current) return;
+    setCustomer(null);
+    setCustomerProfileStatus('loading');
+    setCustomerProfileError(null);
+    try {
+      const res = await fetch(ShopifyEnv.customerAccountGraphqlUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({ query: PROFILE_QUERY }),
+      });
+      const json = await res.json();
+      const raw = json?.data?.customer;
+      if (!raw) throw new Error('Shopify did not return a customer profile.');
+      if (requestVersion !== profileRequestVersion.current) return;
+      const nextCustomer: CustomerProfile = {
+        id: raw.id ?? null,
+        firstName: raw.firstName ?? null,
+        lastName: raw.lastName ?? null,
+        emailAddress: raw.emailAddress?.emailAddress ?? null,
+      };
+      setCustomer(nextCustomer);
+      setCustomerProfileStatus('ready');
+      if (nextCustomer.emailAddress) {
+        identify(nextCustomer.emailAddress, { email: nextCustomer.emailAddress });
+      }
+      if (nextCustomer.id ?? nextCustomer.emailAddress) {
+        identifyPushUser(
+          (nextCustomer.id ?? nextCustomer.emailAddress)!,
+          nextCustomer.emailAddress,
+        );
+      }
+    } catch (error) {
+      if (requestVersion === profileRequestVersion.current) {
+        setCustomer(null);
+        setCustomerProfileStatus('error');
+        setCustomerProfileError(
+          'We couldn’t load your customer profile. Check your connection and try again.',
+        );
+      }
+      throw error;
     }
   }, []);
 
-  // Load the profile whenever we hold a token. (Clearing on sign-out / refresh
-  // failure is handled where the tokens are cleared.)
+  const retryCustomerProfile = useCallback(async (): Promise<void> => {
+    const token = await getAccessToken();
+    if (!token) {
+      throw new Error('Sign in before loading a customer profile.');
+    }
+    profileAccessToken.current = token;
+    await loadCustomerProfile(token);
+  }, [getAccessToken, loadCustomerProfile]);
+
   useEffect(() => {
-    const token = tokens?.accessToken;
-    if (!token) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(ShopifyEnv.customerAccountGraphqlUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: token },
-          body: JSON.stringify({ query: PROFILE_QUERY }),
-        });
-        const json = await res.json();
-        const raw = json?.data?.customer;
-        if (raw && !cancelled) {
-          const c: CustomerProfile = {
-            id: raw.id ?? null,
-            firstName: raw.firstName ?? null,
-            lastName: raw.lastName ?? null,
-            emailAddress: raw.emailAddress?.emailAddress ?? null,
-          };
-          setCustomer(c);
-          if (c.emailAddress) identify(c.emailAddress, { email: c.emailAddress });
-          if (c.id ?? c.emailAddress) {
-            identifyPushUser((c.id ?? c.emailAddress)!, c.emailAddress);
-          }
-        }
-      } catch {
-        // non-fatal — profile just stays null
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tokens?.accessToken]);
+    if (!tokens?.accessToken) return;
+    let active = true;
+    void getAccessToken()
+      .then((token) => {
+        if (!active || !token || profileAccessToken.current === token) return;
+        profileAccessToken.current = token;
+        return loadCustomerProfile(token);
+      })
+      .catch(() => {
+        // The explicit profile error remains available to the cart for retry.
+      });
+    return () => { active = false; };
+  }, [getAccessToken, loadCustomerProfile, tokens?.accessToken]);
 
   const signIn = useCallback(async () => {
     if (!isCustomerAccountConfigured) {
@@ -192,28 +279,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
     const stored = toStored(exchange);
     await saveTokens(stored);
+    await AsyncStorage.removeItem(SIGNED_OUT_TOMBSTONE_KEY);
+    tokensRef.current = stored;
     setTokens(stored);
     track('login');
   }, []);
 
   const signOut = useCallback(async () => {
-    await deleteTokens();
-    setTokens(null);
-    setCustomer(null);
-    resetAnalytics();
-    resetPushUser();
-  }, []);
+    await clearCustomerSession();
+  }, [clearCustomerSession]);
+
+  const customerSessionKey = customer?.id ?? null;
 
   const value = useMemo<AuthContextValue>(
     () => ({
       ready,
       isAuthenticated: Boolean(tokens?.accessToken),
       customer,
+      customerProfileStatus,
+      customerProfileError,
+      customerSessionKey,
+      retryCustomerProfile,
       getAccessToken,
       signIn,
       signOut,
     }),
-    [ready, tokens?.accessToken, customer, getAccessToken, signIn, signOut],
+    [
+      ready,
+      tokens?.accessToken,
+      customer,
+      customerProfileStatus,
+      customerProfileError,
+      customerSessionKey,
+      retryCustomerProfile,
+      getAccessToken,
+      signIn,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

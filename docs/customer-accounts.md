@@ -11,9 +11,22 @@ Full OAuth 2.0 + PKCE flow for a **mobile public client**:
 - `src/shopify/auth.tsx` — `AuthProvider` / `useAuth()`: sign in, sign out, token
   storage in `expo-secure-store`, silent refresh, profile load.
 - `src/shopify/customer.ts` — `customerGraphql()` helper + `useOrders`, `useOrder`,
-  `useAddresses` hooks (validated against Customer Account API `2026-07`).
+  `useAddresses` hooks (validated against Customer Account API `2026-07`). Query
+  keys contain the resolved Shopify customer ID, and sign-out cancels and removes
+  every protected customer query.
 - Screens: `src/app/account/orders.tsx`, `src/app/account/order/[id].tsx`,
   `src/app/account/addresses.tsx`; entry point in `src/app/(tabs)/account.tsx`.
+
+Protected routes wait for authentication and a successfully loaded customer
+profile before mounting their data hooks. A direct order/address deep link while
+signed out therefore cannot execute a Customer Account API request or reveal a
+previous customer's cached result. The existing profile error remains explicit
+and retryable.
+
+Orders include separate payment and fulfillment states, locale dates, item
+media/variants, fulfillment tracking, and the cost fields supported by the
+configured API version. Addresses use Shopify's locale-aware `formatted` field,
+paginate safely, and remain view-only.
 
 ## Endpoints
 
@@ -28,6 +41,18 @@ Derived from `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL`
 | GraphQL | `https://shopify.com/<shop-id>/account/customer/api/<version>/graphql` (note: **no** `/authentication` segment) |
 
 Scopes requested: `openid email customer-account-api:full`.
+
+## Hosted address management
+
+Set the complete hosted Shopify customer-account URL in `.env`:
+
+```sh
+EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL=https://account.example.com/addresses
+```
+
+Only `https://` URLs are opened; `http://`, malformed, and non-web values hide
+the action. This is the sole address-management handoff. The app does not
+implement native address create, update, or delete mutations.
 
 ## Two things to configure in Shopify
 
@@ -59,4 +84,7 @@ returns *"Invalid redirect_uri scheme"*.
 ## Verify
 
 Sign in → Shopify login → back to the app authenticated → Account shows your name
-→ **Orders** and **Addresses** load from the Customer Account API.
+→ **Orders** and **Addresses** load from the Customer Account API. Then sign out
+from an order screen, sign in as a different customer, and confirm no prior name,
+order, address, or loading placeholder reappears. Complete the account cases in
+[`manual-qa.md`](./manual-qa.md) on both platforms.

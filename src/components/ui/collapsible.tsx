@@ -1,65 +1,43 @@
-import { SymbolView } from 'expo-symbols';
+import { Accordion } from 'heroui-native/accordion';
 import { PropsWithChildren, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import { StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { AppText } from '@/components/ui/app-text';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+
+const COLLAPSIBLE_VALUE = 'content';
 
 export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const theme = useTheme();
-
+  const [value, setValue] = useState<string | undefined>();
   return (
-    <ThemedView>
-      <Pressable
-        style={({ pressed }) => [styles.heading, pressed && styles.pressedHeading]}
-        onPress={() => setIsOpen((value) => !value)}>
-        <ThemedView type="backgroundElement" style={styles.button}>
-          <SymbolView
-            name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-            size={14}
-            weight="bold"
-            tintColor={theme.text}
-            style={{ transform: [{ rotate: isOpen ? '-90deg' : '90deg' }] }}
-          />
-        </ThemedView>
-
-        <ThemedText type="small">{title}</ThemedText>
-      </Pressable>
-      {isOpen && (
-        <Animated.View entering={FadeIn.duration(200)}>
-          <ThemedView type="backgroundElement" style={styles.content}>
-            {children}
-          </ThemedView>
-        </Animated.View>
-      )}
-    </ThemedView>
+    <Accordion
+      selectionMode="single"
+      variant="surface"
+      hideSeparator
+      value={value}
+      onValueChange={setValue}>
+      <Accordion.Item value={COLLAPSIBLE_VALUE}>
+        <Accordion.Trigger accessibilityLabel={title} className="min-h-11">
+          <View style={styles.heading}>
+            <AppText variant="caption">{title}</AppText>
+            <Accordion.Indicator />
+          </View>
+        </Accordion.Trigger>
+        <Accordion.Content className="mt-3 rounded-xl bg-surface-secondary p-4">
+          {children}
+        </Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
   );
 }
 
 const styles = StyleSheet.create({
   heading: {
+    minHeight: 44,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.two,
-  },
-  pressedHeading: {
-    opacity: 0.7,
-  },
-  button: {
-    width: Spacing.four,
-    height: Spacing.four,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    marginTop: Spacing.three,
-    borderRadius: Spacing.three,
-    marginLeft: Spacing.four,
-    padding: Spacing.four,
   },
 });
