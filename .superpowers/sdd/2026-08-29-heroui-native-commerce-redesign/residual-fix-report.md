@@ -192,3 +192,174 @@ npx expo export --platform ios \
 No automated blocker remains. Physical-device VoiceOver/TalkBack announcement
 timing and a live Storefront mutation racing Checkout Completed cart clearing
 remain appropriate final integration checks.
+
+---
+
+## Addendum: Serialized generation-aware cart-ID persistence
+
+### Status
+
+The remaining durable-storage race is fixed on
+`feat/heroui-native-ui-redesign`. This addendum supersedes the earlier, narrower
+claim that create-cart persistence was safe after a concurrent clear.
+
+- Planned commit subject: `fix: serialize cart ID persistence`
+- Scope: ordering of old create writes, cart-clear removals, and new-generation
+  create writes to `storefront.cart.id`.
+- No push, PR, or merge was performed.
+
+### Root cause
+
+Snapshot generations prevented an old remote cart response from returning to
+React state, but `persistId()` still sent independent calls directly to
+AsyncStorage. There were two durable-state schedules that generation checks
+alone did not protect:
+
+1. An old-generation create entered a delayed `setItem`. `clearLocal()` then
+   invalidated it and a new-generation create stored `cart-new`. When the old
+   `setItem` eventually returned, the stale branch unconditionally called
+   `removeItem`, deleting the valid new ID.
+2. `clearLocal()` entered a delayed `removeItem` and was intentionally not
+   awaited. A subsequent new-generation create stored `cart-new`, after which
+   the old removal completed and deleted it.
+
+The in-memory generation boundary remained correct in both schedules. The
+failure was isolated to the unordered asynchronous storage boundary.
+
+### TDD RED
+
+Files:
+
+- `src/shopify/cart-provider.test.tsx`
+
+Added two provider-level schedules using controlled AsyncStorage promises:
+
+- `keeps a new cart ID when an old create persistence finishes after a clear`
+  starts `cart-old`, holds its `setItem`, calls `clearLocal()` without awaiting
+  it, starts `cart-new`, then releases the old write.
+- `keeps a new cart ID when a delayed clear persistence finishes later` holds
+  the clear's `removeItem`, immediately starts `cart-new`, then releases the
+  removal.
+
+Both tests assert the consumer-visible contract: memory and durable storage end
+with exactly `cart-new`. They do not rely on private coordinator structure.
+
+RED command:
+
+```text
+npm test -- --runInBand src/shopify/cart-provider.test.tsx
+```
+
+Observed RED:
+
+```text
+CartProvider snapshot ordering
+  ✕ keeps a new cart ID when an old create persistence finishes after a clear
+  ✕ keeps a new cart ID when a delayed clear persistence finishes later
+
+Expected: "cart-new"
+Received: null
+
+1 suite failed; 2 tests failed, 4 passed
+```
+
+The in-memory `cart.id` assertion passed in each case; only the simulated
+AsyncStorage value failed, confirming the diagnosis.
+
+### Minimal implementation
+
+Files:
+
+- `src/shopify/cart-operations.ts`
+- `src/shopify/cart.tsx`
+- `src/shopify/cart-provider.test.tsx`
+
+`CartIdPersistenceCoordinator` now owns one promise tail for every durable
+cart-ID operation. Each queued operation:
+
+1. waits for the prior storage operation, recovering the queue if that caller
+   received an AsyncStorage error;
+2. checks that its `CartSnapshotToken` still belongs to the current generation;
+3. performs either the ID write or removal; and
+4. reports whether its generation remained current while the write was in
+   flight.
+
+This ordering makes an already-running stale write harmless: the current
+generation's clear and new-cart write execute after it, in invocation order.
+Work that is already stale when its queue slot opens is skipped. The old create
+path now returns when persistence reports a stale token and never issues an
+unconditional cleanup removal.
+
+Every existing cart-ID persistence caller now supplies the snapshot token that
+authorized it: rehydration cleanup, reconciliation cleanup, refresh cleanup,
+cart creation, stale-cart recovery, and local clear. `clearLocal()` invalidates
+the snapshot generation synchronously, creates the new-generation clear token,
+clears refs/state, and enqueues the removal before its first `await`. Therefore
+Checkout Completed remains safe when it calls `void clearLocal()` and navigates
+immediately: a later new create can only enqueue its ID write after that clear.
+
+### GREEN evidence
+
+Focused command:
+
+```text
+npm test -- --runInBand \
+  src/shopify/cart-provider.test.tsx \
+  src/shopify/cart-operations.test.ts
+
+2 suites passed, 11 tests passed, 0 failures
+```
+
+The two new schedules pass. The existing old-mutation-after-clear regression
+still keeps memory/storage empty without reconciliation, and the reverse
+cross-line response regression still preserves both successful quantities.
+
+### Final verification
+
+Fresh commands after the last production change:
+
+```text
+npm test -- --runInBand
+  21 suites passed, 126 tests passed, 0 snapshots, 0 failures
+
+npm run typecheck
+  exit 0
+
+npm run lint
+  exit 0
+
+git diff --check
+  exit 0
+```
+
+Native exports:
+
+```text
+npx expo export --platform android \
+  --output-dir /tmp/uhs-persistence-race-android-20260830
+  Android bundled 2621 modules; 6.3 MB Hermes bundle; exit 0
+
+npx expo export --platform ios \
+  --output-dir /tmp/uhs-persistence-race-ios-20260830
+  iOS bundled 2535 modules; 6.1 MB Hermes bundle; exit 0
+```
+
+Both Metro runs emitted only the existing environment warning that `NO_COLOR`
+is ignored because `FORCE_COLOR` is set.
+
+### Self-review and concerns
+
+- Durable cart-ID writes/removals have one ordering authority; no direct
+  cart-ID `setItem`/`removeItem` call remains outside its writer.
+- An invalidated operation cannot start a new durable write when its queue slot
+  opens.
+- A write invalidated while already running cannot finish after the current
+  generation's queued clear/new write.
+- Storage failures are still delivered to the initiating caller but do not
+  poison later queue entries.
+- Snapshot ordering and cross-line reconciliation behavior are unchanged.
+- Checkout completion still clears refs and reducer state synchronously, and
+  its fire-and-forget durable removal is ordered before any subsequent create.
+
+No automated blocker remains. A physical-device checkout-completion/new-cart
+race against real AsyncStorage remains an appropriate final integration check.

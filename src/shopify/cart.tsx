@@ -14,6 +14,7 @@ import {
 import { useAuth } from './auth';
 import {
   buyerIdentityKey,
+  CartIdPersistenceCoordinator,
   cartErrorMessage,
   cartOperationReducer,
   CartSnapshotSequencer,
@@ -97,6 +98,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartOperationReducer, null, createCartOperationState);
   const [ready, setReady] = useState(false);
   const [snapshotSequencer] = useState(() => new CartSnapshotSequencer());
+  const [cartIdPersistence] = useState(() => new CartIdPersistenceCoordinator(
+    (token) => snapshotSequencer.isCurrent(token),
+    async (id) => {
+      if (id) await AsyncStorage.setItem(CART_ID_KEY, id);
+      else await AsyncStorage.removeItem(CART_ID_KEY);
+    },
+  ));
   const [syncedBuyerKey, setSyncedBuyerKey] = useState<string | null>(null);
   const cartRef = useRef<Cart | null>(null);
   const syncedBuyerRef = useRef<string | null>(null);
@@ -118,10 +126,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const persistId = useCallback(async (id: string | null) => {
-    if (id) await AsyncStorage.setItem(CART_ID_KEY, id);
-    else await AsyncStorage.removeItem(CART_ID_KEY);
-  }, []);
+  const persistId = useCallback(
+    (token: CartSnapshotToken, id: string | null) => cartIdPersistence.persist(token, id),
+    [cartIdPersistence],
+  );
 
   const setCartValue = useCallback((cart: Cart | null) => {
     cartRef.current = cart;
@@ -148,7 +156,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const reconciliationVersion = snapshotSequencer.begin();
     const data = await storefront<{ cart: Cart | null }>(CART_QUERY, { id: cartId });
     const accepted = applyCartSnapshot(reconciliationVersion, data.cart);
-    if (accepted && !data.cart) await persistId(null);
+    if (accepted && !data.cart) await persistId(reconciliationVersion, null);
     return accepted;
   }, [applyCartSnapshot, persistId, snapshotSequencer]);
 
@@ -173,7 +181,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           const data = await storefront<{ cart: Cart | null }>(CART_QUERY, { id });
           if (!cancelled) {
             const accepted = applyCartSnapshot(version, data.cart);
-            if (accepted && !data.cart) await persistId(null);
+            if (accepted && !data.cart) await persistId(version, null);
           }
         }
       } catch {
@@ -193,7 +201,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     try {
       const data = await storefront<{ cart: Cart | null }>(CART_QUERY, { id: current.id });
       const accepted = applyCartSnapshot(version, data.cart);
-      if (accepted && !data.cart) await persistId(null);
+      if (accepted && !data.cart) await persistId(version, null);
       dispatch({ type: 'completed', key: 'refresh' });
     } catch (error) {
       dispatch({ type: 'failed', key: 'refresh', message: cartErrorMessage('refresh') });
@@ -210,12 +218,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       let next: Cart;
       if (!current?.id) {
         next = await createRemoteCart(lines);
-        if (!snapshotSequencer.isCurrent(version)) return;
-        await persistId(next.id);
-        if (!snapshotSequencer.isCurrent(version)) {
-          await persistId(null);
-          return;
-        }
+        if (!await persistId(version, next.id)) return;
       } else {
         const data = await storefront<CartLinesAddPayload>(CART_LINES_ADD, {
           cartId: current.id,
@@ -311,7 +314,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         createRemoteCart,
       );
       const accepted = applyCartSnapshot(version, recovered);
-      if (accepted) await persistId(recovered?.id ?? null);
+      if (accepted) await persistId(version, recovered?.id ?? null);
       dispatch({ type: 'completed', key: 'refresh' });
       return accepted && Boolean(recovered);
     } catch (error) {
@@ -406,11 +409,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearLocal = useCallback(async () => {
     snapshotSequencer.invalidate();
+    const version = snapshotSequencer.begin();
     syncedBuyerRef.current = null;
     setSyncedBuyerKey(null);
     cartRef.current = null;
     dispatch({ type: 'reset' });
-    await persistId(null);
+    await persistId(version, null);
   }, [persistId, snapshotSequencer]);
 
   const busy = Object.values(state.operations).some((operation) => operation.pending);

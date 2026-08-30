@@ -121,6 +121,30 @@ export interface CartSnapshotToken {
   version: number;
 }
 
+type CartIdWriter = (id: string | null) => Promise<void>;
+
+/** Serializes durable cart-ID changes and skips work from invalidated generations. */
+export class CartIdPersistenceCoordinator {
+  private tail: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly isCurrent: (token: CartSnapshotToken) => boolean,
+    private readonly write: CartIdWriter,
+  ) {}
+
+  persist(token: CartSnapshotToken, id: string | null): Promise<boolean> {
+    const operation = this.tail
+      .catch(() => undefined)
+      .then(async () => {
+        if (!this.isCurrent(token)) return false;
+        await this.write(id);
+        return this.isCurrent(token);
+      });
+    this.tail = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+}
+
 /** Accepts newer snapshots while rejecting stale versions and invalidated work. */
 export class CartSnapshotSequencer {
   private nextVersion = 0;

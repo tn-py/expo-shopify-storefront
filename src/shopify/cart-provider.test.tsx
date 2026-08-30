@@ -4,7 +4,12 @@ import { useEffect } from 'react';
 
 import { CartProvider, useCart, type CartContextValue } from './cart';
 import { storefront } from './client';
-import { CART_BUYER_IDENTITY_UPDATE, CART_LINES_UPDATE, CART_QUERY } from './queries';
+import {
+  CART_BUYER_IDENTITY_UPDATE,
+  CART_CREATE,
+  CART_LINES_UPDATE,
+  CART_QUERY,
+} from './queries';
 import type { Cart, CartLine } from './types';
 
 let mockAuthState = {
@@ -45,11 +50,12 @@ function makeCart(
   firstQuantity = 1,
   secondQuantity = 1,
   buyerEmail: string | null = null,
+  id = 'cart-1',
 ): Cart {
   const nodes = [line('line-1', firstQuantity), line('line-2', secondQuantity)];
   return {
-    id: 'cart-1',
-    checkoutUrl: 'https://shop.example/checkouts/1',
+    id,
+    checkoutUrl: `https://shop.example/checkouts/${id}`,
     totalQuantity: firstQuantity + secondQuantity,
     buyerIdentity: { email: buyerEmail },
     cost: { subtotalAmount: money, totalAmount: money, totalTaxAmount: null },
@@ -134,6 +140,100 @@ describe('CartProvider identity synchronization', () => {
 });
 
 describe('CartProvider snapshot ordering', () => {
+  it('keeps a new cart ID when an old create persistence finishes after a clear', async () => {
+    let persistedCartId: string | null = null;
+    let releaseOldSet!: () => void;
+    let createCount = 0;
+    mockStorage.getItem.mockResolvedValue(null);
+    mockStorage.setItem.mockImplementation(async (_key, value) => {
+      if (value === 'cart-old') {
+        await new Promise<void>((resolve) => { releaseOldSet = resolve; });
+      }
+      persistedCartId = value;
+    });
+    mockStorage.removeItem.mockImplementation(async () => {
+      persistedCartId = null;
+    });
+    mockStorefront.mockImplementation(async (operation: string) => {
+      if (operation === CART_CREATE) {
+        createCount += 1;
+        const id = createCount === 1 ? 'cart-old' : 'cart-new';
+        return { cartCreate: { cart: makeCart(1, 1, null, id), userErrors: [] } };
+      }
+      throw new Error('unexpected operation');
+    });
+    await render(<CartProvider><Probe /></CartProvider>);
+    await waitFor(() => expect(latestCartContext?.ready).toBe(true));
+
+    let oldAdd!: Promise<void>;
+    await act(async () => {
+      oldAdd = latestCartContext!.addLine('variant-old');
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(releaseOldSet).toBeDefined());
+
+    let clear!: Promise<void>;
+    let newAdd!: Promise<void>;
+    await act(async () => {
+      clear = latestCartContext!.clearLocal();
+      newAdd = latestCartContext!.addLine('variant-new');
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(createCount).toBe(2));
+
+    await act(async () => {
+      releaseOldSet();
+      await Promise.all([oldAdd, clear, newAdd]);
+    });
+
+    expect(latestCartContext!.cart?.id).toBe('cart-new');
+    expect(persistedCartId).toBe('cart-new');
+  });
+
+  it('keeps a new cart ID when a delayed clear persistence finishes later', async () => {
+    let persistedCartId: string | null = null;
+    let releaseClear!: () => void;
+    mockStorage.getItem.mockResolvedValue(null);
+    mockStorage.setItem.mockImplementation(async (_key, value) => {
+      persistedCartId = value;
+    });
+    mockStorage.removeItem.mockImplementation(async () => {
+      await new Promise<void>((resolve) => { releaseClear = resolve; });
+      persistedCartId = null;
+    });
+    mockStorefront.mockImplementation(async (operation: string) => {
+      if (operation === CART_CREATE) {
+        return {
+          cartCreate: {
+            cart: makeCart(1, 1, null, 'cart-new'),
+            userErrors: [],
+          },
+        };
+      }
+      throw new Error('unexpected operation');
+    });
+    await render(<CartProvider><Probe /></CartProvider>);
+    await waitFor(() => expect(latestCartContext?.ready).toBe(true));
+
+    let clear!: Promise<void>;
+    let newAdd!: Promise<void>;
+    await act(async () => {
+      clear = latestCartContext!.clearLocal();
+      newAdd = latestCartContext!.addLine('variant-new');
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(releaseClear).toBeDefined());
+    await waitFor(() => expect(mockStorefront).toHaveBeenCalledWith(CART_CREATE, expect.any(Object)));
+
+    await act(async () => {
+      releaseClear();
+      await Promise.all([clear, newAdd]);
+    });
+
+    expect(latestCartContext!.cart?.id).toBe('cart-new');
+    expect(persistedCartId).toBe('cart-new');
+  });
+
   it('does not let a mutation started before clearLocal restore the cleared cart', async () => {
     let persistedCartId: string | null = 'cart-1';
     let resolveUpdate!: (value: unknown) => void;
