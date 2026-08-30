@@ -40,6 +40,7 @@ const CART = `
     id
     checkoutUrl
     totalQuantity
+    buyerIdentity { email }
     cost {
       subtotalAmount { ...Money }
       totalAmount { ...Money }

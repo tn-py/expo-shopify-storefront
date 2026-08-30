@@ -7,17 +7,18 @@ export type QuantityStepperProps = {
   value: number;
   min?: number;
   max?: number;
+  disabled?: boolean;
   onChange: (value: number) => void;
 };
 
-export function QuantityStepper({ value, min = 1, max, onChange }: QuantityStepperProps) {
+export function QuantityStepper({ value, min = 1, max, disabled = false, onChange }: QuantityStepperProps) {
   const theme = useTheme();
-  const decreaseDisabled = value <= min;
-  const increaseDisabled = max != null && value >= max;
+  const decreaseDisabled = disabled || value <= min;
+  const increaseDisabled = disabled || (max != null && value >= max);
   const controlStyle = [styles.control, { backgroundColor: theme.backgroundElement }];
 
   return (
-    <View accessibilityRole="adjustable" accessibilityValue={{ now: value, min, max }} style={styles.root}>
+    <View accessibilityRole="adjustable" accessibilityState={{ busy: disabled, disabled }} accessibilityValue={{ now: value, min, max }} style={styles.root}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Decrease quantity"

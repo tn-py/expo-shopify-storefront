@@ -107,6 +107,7 @@ export interface Cart {
   id: string;
   checkoutUrl: string;
   totalQuantity: number;
+  buyerIdentity?: { email: string | null } | null;
   cost: {
     subtotalAmount: Money;
     totalAmount: Money;
