@@ -116,6 +116,44 @@ export class QuantityUpdateQueue {
   }
 }
 
+/** Accepts newer full-cart snapshots while rejecting responses that arrive behind them. */
+export class CartSnapshotSequencer {
+  private nextVersion = 0;
+  private appliedVersion = 0;
+
+  begin(): number {
+    this.nextVersion += 1;
+    return this.nextVersion;
+  }
+
+  accept(version: number): boolean {
+    if (version < this.appliedVersion) return false;
+    this.appliedVersion = version;
+    return true;
+  }
+
+  invalidate(): void {
+    this.appliedVersion = this.begin();
+  }
+}
+
+export type BuyerIdentityTarget =
+  | { status: 'pending' }
+  | { status: 'ready'; email: string | null };
+
+export function resolveBuyerIdentityTarget(
+  authReady: boolean,
+  isAuthenticated: boolean,
+  customer: { emailAddress: string | null } | null,
+): BuyerIdentityTarget {
+  if (!authReady || (isAuthenticated && !customer)) return { status: 'pending' };
+  return { status: 'ready', email: isAuthenticated ? customer?.emailAddress ?? null : null };
+}
+
+export function buyerIdentityKey(cartId: string, target: Extract<BuyerIdentityTarget, { status: 'ready' }>): string {
+  return `${cartId}:${target.email ?? '<guest>'}`;
+}
+
 export interface CartLineInput {
   merchandiseId: string;
   quantity: number;

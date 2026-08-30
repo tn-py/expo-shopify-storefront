@@ -13,12 +13,15 @@ import {
 
 import { useAuth } from './auth';
 import {
+  buyerIdentityKey,
   cartErrorMessage,
   cartOperationReducer,
+  CartSnapshotSequencer,
   createCartOperationState,
   QuantityUpdateQueue,
   recoverStaleCart as rebuildStaleCart,
   removalUndoInput,
+  resolveBuyerIdentityTarget,
   type CartLineInput,
   type CartOperationStatus,
 } from './cart-operations';
@@ -60,6 +63,8 @@ export interface CartContextValue {
   refresh: () => Promise<void>;
   recoverStaleCart: () => Promise<boolean>;
   syncBuyerIdentity: () => Promise<void>;
+  buyerIdentityReady: boolean;
+  buyerIdentityResolved: boolean;
   clearOperationError: (key: string) => void;
   clearLocal: () => Promise<void>;
 }
@@ -77,12 +82,18 @@ function requireCart(result: MutationResult): Cart {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, customer } = useAuth();
+  const { ready: authReady, isAuthenticated, customer } = useAuth();
   const [state, dispatch] = useReducer(cartOperationReducer, null, createCartOperationState);
   const [ready, setReady] = useState(false);
+  const [snapshotSequencer] = useState(() => new CartSnapshotSequencer());
+  const [syncedBuyerKey, setSyncedBuyerKey] = useState<string | null>(null);
   const cartRef = useRef<Cart | null>(null);
   const syncedBuyerRef = useRef<string | null>(null);
-  const buyerEmail = isAuthenticated ? customer?.emailAddress ?? null : null;
+  const buyerIdentitySyncRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const buyerIdentityTarget = useMemo(
+    () => resolveBuyerIdentityTarget(authReady, isAuthenticated, customer),
+    [authReady, customer, isAuthenticated],
+  );
 
   const persistId = useCallback(async (id: string | null) => {
     if (id) await AsyncStorage.setItem(CART_ID_KEY, id);
@@ -94,24 +105,34 @@ export function CartProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'cartChanged', cart });
   }, []);
 
+  const applyCartSnapshot = useCallback((version: number, cart: Cart | null): boolean => {
+    if (!snapshotSequencer.accept(version)) return false;
+    setCartValue(cart);
+    return true;
+  }, [setCartValue, snapshotSequencer]);
+
   const createRemoteCart = useCallback(async (lines: CartLineInput[]): Promise<Cart> => {
     const data = await storefront<CartCreatePayload>(CART_CREATE, {
       lines,
-      buyerIdentity: buyerEmail ? { email: buyerEmail } : undefined,
+      buyerIdentity:
+        buyerIdentityTarget.status === 'ready'
+          ? { email: buyerIdentityTarget.email }
+          : undefined,
     });
     return requireCart(data.cartCreate);
-  }, [buyerEmail]);
+  }, [buyerIdentityTarget]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const version = snapshotSequencer.begin();
       try {
         const id = await AsyncStorage.getItem(CART_ID_KEY);
         if (id) {
           const data = await storefront<{ cart: Cart | null }>(CART_QUERY, { id });
           if (!cancelled) {
-            setCartValue(data.cart);
-            if (!data.cart) await persistId(null);
+            const accepted = applyCartSnapshot(version, data.cart);
+            if (accepted && !data.cart) await persistId(null);
           }
         }
       } catch {
@@ -121,24 +142,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [persistId, setCartValue]);
+  }, [applyCartSnapshot, persistId, snapshotSequencer]);
 
   const refresh = useCallback(async () => {
     const current = cartRef.current;
     if (!current?.id) return;
+    const version = snapshotSequencer.begin();
     dispatch({ type: 'started', key: 'refresh', kind: 'refresh' });
     try {
       const data = await storefront<{ cart: Cart | null }>(CART_QUERY, { id: current.id });
-      setCartValue(data.cart);
-      if (!data.cart) await persistId(null);
-      dispatch({ type: 'completed', key: 'refresh', cart: data.cart });
+      const accepted = applyCartSnapshot(version, data.cart);
+      if (accepted && !data.cart) await persistId(null);
+      dispatch({ type: 'completed', key: 'refresh' });
     } catch (error) {
       dispatch({ type: 'failed', key: 'refresh', message: cartErrorMessage('refresh') });
       throw error;
     }
-  }, [persistId, setCartValue]);
+  }, [applyCartSnapshot, persistId, snapshotSequencer]);
 
   const addLine = useCallback(async (variantId: string, quantity = 1) => {
+    const version = snapshotSequencer.begin();
     dispatch({ type: 'started', key: 'add', kind: 'add' });
     try {
       const lines = [{ merchandiseId: variantId, quantity }];
@@ -154,16 +177,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
         });
         next = requireCart(data.cartLinesAdd);
       }
-      setCartValue(next);
-      dispatch({ type: 'completed', key: 'add', cart: next });
+      applyCartSnapshot(version, next);
+      dispatch({ type: 'completed', key: 'add' });
     } catch (error) {
       dispatch({ type: 'failed', key: 'add', message: cartErrorMessage('add') });
       throw error;
     }
-  }, [createRemoteCart, persistId, setCartValue]);
+  }, [applyCartSnapshot, createRemoteCart, persistId, snapshotSequencer]);
 
   const [quantityQueue] = useState(() => new QuantityUpdateQueue());
   const writeQuantity = useCallback(async (lineId: string, quantity: number) => {
+    const version = snapshotSequencer.begin();
     const current = cartRef.current;
     if (!current?.id) return;
     const data = await storefront<CartLinesUpdatePayload>(CART_LINES_UPDATE, {
@@ -171,8 +195,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       lines: [{ id: lineId, quantity }],
     });
     const next = requireCart(data.cartLinesUpdate);
-    setCartValue(next);
-  }, [setCartValue]);
+    applyCartSnapshot(version, next);
+  }, [applyCartSnapshot, snapshotSequencer]);
 
   const updateLine = useCallback(async (lineId: string, quantity: number) => {
     if (!cartRef.current?.id) return;
@@ -180,7 +204,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'started', key, kind: 'update' });
     try {
       await quantityQueue.request(lineId, quantity, writeQuantity);
-      dispatch({ type: 'completed', key, cart: cartRef.current });
+      dispatch({ type: 'completed', key });
     } catch (error) {
       dispatch({ type: 'failed', key, message: cartErrorMessage('update') });
       throw error;
@@ -192,6 +216,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!current?.id) return;
     const removedLine = current.lines.nodes.find((line) => line.id === lineId);
     if (!removedLine) return;
+    const version = snapshotSequencer.begin();
     const key = `line:${lineId}`;
     dispatch({ type: 'started', key, kind: 'remove' });
     try {
@@ -200,18 +225,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
         lineIds: [lineId],
       });
       const next = requireCart(data.cartLinesRemove);
-      setCartValue(next);
-      dispatch({ type: 'completed', key, cart: next, removedLine });
+      const accepted = applyCartSnapshot(version, next);
+      dispatch({ type: 'completed', key, removedLine: accepted ? removedLine : undefined });
     } catch (error) {
       dispatch({ type: 'failed', key, message: cartErrorMessage('remove') });
       throw error;
     }
-  }, [setCartValue]);
+  }, [applyCartSnapshot, snapshotSequencer]);
 
   const undoRemove = useCallback(async () => {
     const removedLine = state.lastRemovedLine;
     const current = cartRef.current;
     if (!removedLine || !current?.id) return;
+    const version = snapshotSequencer.begin();
     dispatch({ type: 'started', key: 'undo', kind: 'undo' });
     try {
       const data = await storefront<CartLinesAddPayload>(CART_LINES_ADD, {
@@ -219,17 +245,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
         lines: [removalUndoInput(removedLine)],
       });
       const next = requireCart(data.cartLinesAdd);
-      setCartValue(next);
-      dispatch({ type: 'completed', key: 'undo', cart: next, clearRemoved: true });
+      const accepted = applyCartSnapshot(version, next);
+      dispatch({ type: 'completed', key: 'undo', clearRemoved: accepted });
     } catch (error) {
       dispatch({ type: 'failed', key: 'undo', message: cartErrorMessage('undo') });
       throw error;
     }
-  }, [setCartValue, state.lastRemovedLine]);
+  }, [applyCartSnapshot, snapshotSequencer, state.lastRemovedLine]);
 
   const recoverStaleCart = useCallback(async (): Promise<boolean> => {
     const previous = cartRef.current;
     if (!previous) return false;
+    const version = snapshotSequencer.begin();
     dispatch({ type: 'started', key: 'refresh', kind: 'refresh' });
     try {
       const recovered = await rebuildStaleCart(
@@ -237,49 +264,106 @@ export function CartProvider({ children }: { children: ReactNode }) {
         async (id) => (await storefront<{ cart: Cart | null }>(CART_QUERY, { id })).cart,
         createRemoteCart,
       );
-      setCartValue(recovered);
-      await persistId(recovered?.id ?? null);
-      dispatch({ type: 'completed', key: 'refresh', cart: recovered });
-      return Boolean(recovered);
+      const accepted = applyCartSnapshot(version, recovered);
+      if (accepted) await persistId(recovered?.id ?? null);
+      dispatch({ type: 'completed', key: 'refresh' });
+      return accepted && Boolean(recovered);
     } catch (error) {
       dispatch({ type: 'failed', key: 'refresh', message: cartErrorMessage('refresh') });
       throw error;
     }
-  }, [createRemoteCart, persistId, setCartValue]);
+  }, [applyCartSnapshot, createRemoteCart, persistId, snapshotSequencer]);
+
+  const markBuyerIdentitySynced = useCallback((key: string) => {
+    if (syncedBuyerRef.current === key) return;
+    syncedBuyerRef.current = key;
+    setSyncedBuyerKey(key);
+  }, []);
 
   const syncBuyerIdentity = useCallback(async () => {
-    const current = cartRef.current;
-    if (!current?.id || !buyerEmail) return;
-    const synchronizationKey = `${current.id}:${buyerEmail}`;
-    if (syncedBuyerRef.current === synchronizationKey) return;
-    dispatch({ type: 'started', key: 'buyerIdentity', kind: 'buyerIdentity' });
-    try {
-      const data = await storefront<CartBuyerIdentityUpdatePayload>(CART_BUYER_IDENTITY_UPDATE, {
-        cartId: current.id,
-        buyerIdentity: { email: buyerEmail },
-      });
-      const next = requireCart(data.cartBuyerIdentityUpdate);
-      syncedBuyerRef.current = synchronizationKey;
-      setCartValue(next);
-      dispatch({ type: 'completed', key: 'buyerIdentity', cart: next });
-    } catch (error) {
-      dispatch({ type: 'failed', key: 'buyerIdentity', message: cartErrorMessage('buyerIdentity') });
-      throw error;
+    if (buyerIdentityTarget.status === 'pending') {
+      throw new Error('Buyer identity is still loading.');
     }
-  }, [buyerEmail, setCartValue]);
+    let current = cartRef.current;
+    if (!current?.id) return;
+    const synchronizationKey = buyerIdentityKey(current.id, buyerIdentityTarget);
+    if (syncedBuyerRef.current === synchronizationKey) return;
+    if (current.buyerIdentity !== undefined && current.buyerIdentity?.email === buyerIdentityTarget.email) {
+      markBuyerIdentitySynced(synchronizationKey);
+      return;
+    }
+
+    const inFlight = buyerIdentitySyncRef.current;
+    if (inFlight) {
+      try {
+        await inFlight.promise;
+      } catch {
+        // A changed identity still needs its own synchronization attempt.
+      }
+      current = cartRef.current;
+      if (!current?.id) return;
+      if (syncedBuyerRef.current === synchronizationKey) return;
+    }
+
+    const version = snapshotSequencer.begin();
+    dispatch({ type: 'started', key: 'buyerIdentity', kind: 'buyerIdentity' });
+    let promise!: Promise<void>;
+    promise = (async () => {
+      try {
+        const data = await storefront<CartBuyerIdentityUpdatePayload>(CART_BUYER_IDENTITY_UPDATE, {
+          cartId: current.id,
+          buyerIdentity: { email: buyerIdentityTarget.email },
+        });
+        const next = requireCart(data.cartBuyerIdentityUpdate);
+        if (applyCartSnapshot(version, next)) markBuyerIdentitySynced(synchronizationKey);
+        dispatch({ type: 'completed', key: 'buyerIdentity' });
+      } catch (error) {
+        dispatch({ type: 'failed', key: 'buyerIdentity', message: cartErrorMessage('buyerIdentity') });
+        throw error;
+      } finally {
+        if (buyerIdentitySyncRef.current?.promise === promise) {
+          buyerIdentitySyncRef.current = null;
+        }
+      }
+    })();
+    buyerIdentitySyncRef.current = { key: synchronizationKey, promise };
+    await promise;
+  }, [
+    applyCartSnapshot,
+    buyerIdentityTarget,
+    markBuyerIdentitySynced,
+    snapshotSequencer,
+  ]);
+
+  useEffect(() => {
+    if (!state.cart || buyerIdentityTarget.status === 'pending') return;
+    void syncBuyerIdentity().catch(() => {
+      // The operation error remains available for checkout recovery UI.
+    });
+  }, [buyerIdentityTarget, state.cart, syncBuyerIdentity]);
 
   const clearOperationError = useCallback((key: string) => {
     dispatch({ type: 'dismissed', key });
   }, []);
 
   const clearLocal = useCallback(async () => {
+    snapshotSequencer.invalidate();
     syncedBuyerRef.current = null;
+    setSyncedBuyerKey(null);
     cartRef.current = null;
     dispatch({ type: 'reset' });
     await persistId(null);
-  }, [persistId]);
+  }, [persistId, snapshotSequencer]);
 
   const busy = Object.values(state.operations).some((operation) => operation.pending);
+  const desiredBuyerIdentityKey =
+    state.cart && buyerIdentityTarget.status === 'ready'
+      ? buyerIdentityKey(state.cart.id, buyerIdentityTarget)
+      : null;
+  const buyerIdentityReady =
+    !state.cart ||
+    (desiredBuyerIdentityKey !== null && syncedBuyerKey === desiredBuyerIdentityKey);
+  const buyerIdentityResolved = buyerIdentityTarget.status === 'ready';
   const value = useMemo<CartContextValue>(() => ({
     cart: state.cart,
     ready,
@@ -294,6 +378,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     refresh,
     recoverStaleCart,
     syncBuyerIdentity,
+    buyerIdentityReady,
+    buyerIdentityResolved,
     clearOperationError,
     clearLocal,
   }), [
@@ -307,6 +393,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     refresh,
     recoverStaleCart,
     syncBuyerIdentity,
+    buyerIdentityReady,
+    buyerIdentityResolved,
     clearOperationError,
     clearLocal,
   ]);

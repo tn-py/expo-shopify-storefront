@@ -114,7 +114,7 @@ export default function CartScreen() {
               line={line}
               operation={operations[`line:${line.id}`]}
               retry={retryByLine[line.id]}
-              onRequest={(request) => { void runRequest(line, request); }}
+              onRequest={(request) => runRequest(line, request)}
             />
           ))}
         </View>
@@ -213,9 +213,11 @@ function CartLineRow({
   line: CartLine;
   operation?: CartOperationStatus;
   retry?: RetryRequest;
-  onRequest: (request: RetryRequest) => void;
+  onRequest: (request: RetryRequest) => Promise<void>;
 }) {
   const merchandise = line.merchandise;
+  const [optimisticQuantity, setOptimisticQuantity] = useState<number | null>(null);
+  const displayedQuantity = optimisticQuantity ?? line.quantity;
   const variantLabel = merchandise.selectedOptions
     .filter((option) => option.value !== 'Default Title')
     .map((option) => option.value)
@@ -244,9 +246,14 @@ function CartLineRow({
         </View>
         <View style={styles.lineActions}>
           <QuantityStepper
-            value={line.quantity}
-            disabled={operation?.pending}
-            onChange={(quantity) => onRequest({ kind: 'update', quantity })}
+            value={displayedQuantity}
+            busy={operation?.pending && operation.kind === 'update'}
+            disabled={operation?.pending && operation.kind === 'remove'}
+            onChange={(quantity) => {
+              setOptimisticQuantity(quantity);
+              void onRequest({ kind: 'update', quantity })
+                .finally(() => setOptimisticQuantity(null));
+            }}
           />
           <View style={styles.removeAction}>
             <AppButton
@@ -255,7 +262,7 @@ function CartLineRow({
               variant="tertiary"
               loading={operation?.pending && operation.kind === 'remove'}
               disabled={operation?.pending}
-              onPress={() => onRequest({ kind: 'remove' })}
+              onPress={() => { void onRequest({ kind: 'remove' }); }}
             />
           </View>
         </View>
@@ -263,7 +270,7 @@ function CartLineRow({
           <View accessibilityRole="alert" style={styles.lineError}>
             <AppText variant="caption" tone="sale">{operation.error}</AppText>
             {retry ? (
-              <AppButton label="Try again" variant="secondary" onPress={() => onRequest(retry)} />
+              <AppButton label="Try again" variant="secondary" onPress={() => { void onRequest(retry); }} />
             ) : null}
           </View>
         ) : null}

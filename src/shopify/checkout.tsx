@@ -81,6 +81,7 @@ export function useCheckout() {
     operations,
     recoverStaleCart,
     syncBuyerIdentity,
+    buyerIdentityResolved,
   } = useCart();
   const checkoutUrl = cart?.checkoutUrl;
   const [status, setStatus] = useState<CheckoutStatus>({
@@ -174,6 +175,7 @@ export function useCheckout() {
     canCheckout:
       Boolean(checkoutUrl) &&
       (cart?.totalQuantity ?? 0) > 0 &&
+      buyerIdentityResolved &&
       !cartMutationPending &&
       !status.presenting,
     startCheckout,

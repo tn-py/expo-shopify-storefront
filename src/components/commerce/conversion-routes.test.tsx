@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 
 import CartScreen from '@/app/(tabs)/cart';
 import OrderConfirmedScreen from '@/app/order-confirmed';
@@ -94,6 +94,23 @@ describe('cart conversion states', () => {
     const { getByRole } = await render(<CartScreen />);
 
     expect(getByRole('button', { name: 'Undo remove' })).toBeOnTheScreen();
+  });
+
+  it('accumulates rapid quantity taps while the first server update is pending', async () => {
+    const updateLine = jest.fn(() => new Promise<void>(() => undefined));
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      updateLine,
+      operations: {},
+    });
+    const { getByRole, getByLabelText } = await render(<CartScreen />);
+
+    await fireEvent.press(getByRole('button', { name: 'Increase quantity' }));
+    await fireEvent.press(getByRole('button', { name: 'Increase quantity' }));
+    await fireEvent.press(getByRole('button', { name: 'Increase quantity' }));
+
+    expect(getByLabelText('Quantity 4')).toBeOnTheScreen();
+    expect((updateLine.mock.calls as unknown as [string, number][]).map((call) => call[1])).toEqual([2, 3, 4]);
   });
 });
 
