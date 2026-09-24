@@ -1,8 +1,8 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { AppSurface } from '@/components/ui/app-surface';
+import { AppText } from '@/components/ui/app-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -15,43 +15,43 @@ export function SetupRequired() {
   const theme = useTheme();
 
   return (
-    <ThemedView style={styles.container}>
+    <AppSurface style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView
         contentContainerStyle={{
           padding: Spacing.four,
           paddingTop: insets.top + Spacing.five,
           gap: Spacing.three,
         }}>
-        <ThemedText type="title">Almost there</ThemedText>
-        <ThemedText themeColor="textSecondary">
+        <AppText variant="title">Almost there</AppText>
+        <AppText tone="textSecondary">
           This app needs your Shopify Storefront API credentials before it can
           load a catalog.
-        </ThemedText>
+        </AppText>
 
         <View
           style={[
             styles.card,
             { backgroundColor: theme.backgroundElement, borderColor: theme.border },
           ]}>
-          <ThemedText type="smallBold">1. Create your env file</ThemedText>
-          <ThemedText type="code">cp .env.example .env</ThemedText>
-          <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>
+          <AppText variant="captionStrong">1. Create your env file</AppText>
+          <AppText variant="code">cp .env.example .env</AppText>
+          <AppText variant="captionStrong" style={{ marginTop: Spacing.two }}>
             2. Fill in at least
-          </ThemedText>
-          <ThemedText type="code">EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN</ThemedText>
-          <ThemedText type="code">EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN</ThemedText>
-          <ThemedText type="smallBold" style={{ marginTop: Spacing.two }}>
+          </AppText>
+          <AppText variant="code">EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN</AppText>
+          <AppText variant="code">EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN</AppText>
+          <AppText variant="captionStrong" style={{ marginTop: Spacing.two }}>
             3. Restart the dev server
-          </ThemedText>
-          <ThemedText type="code">npx expo start --dev-client --clear</ThemedText>
+          </AppText>
+          <AppText variant="code">npx expo start --dev-client --clear</AppText>
         </View>
 
-        <ThemedText type="small" themeColor="textSecondary">
+        <AppText variant="caption" tone="textSecondary">
           See docs/shopify-setup.md for how to create the Storefront API access
           token and the required scopes.
-        </ThemedText>
+        </AppText>
       </ScrollView>
-    </ThemedView>
+    </AppSurface>
   );
 }
 

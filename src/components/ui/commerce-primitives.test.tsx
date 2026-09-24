@@ -9,7 +9,6 @@ import { AccountMenuRow } from '@/components/ui/account-menu-row';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SelectableChip } from '@/components/ui/selectable-chip';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
 
 describe('commerce controls', () => {
@@ -143,10 +142,10 @@ describe('commerce controls', () => {
         <AppText variant="label">Medium label</AppText>
         <AppText variant="heading">Semibold heading</AppText>
         <AppText variant="title">Bold title</AppText>
-        <ThemedText type="smallBold">Bold caption</ThemedText>
-        <ThemedText type="subtitle">Semibold subtitle</ThemedText>
-        <ThemedText type="link">Semibold link</ThemedText>
-        <ThemedText type="code">{"const sku = '1';"}</ThemedText>
+        <AppText variant="captionStrong">Bold caption</AppText>
+        <AppText variant="heading">Semibold subtitle</AppText>
+        <AppText variant="labelStrong">Semibold link</AppText>
+        <AppText variant="code">{"const sku = '1';"}</AppText>
       </>,
     );
 

@@ -19,7 +19,6 @@ const APP_NAME = pick(env.EXPO_PUBLIC_APP_NAME, 'Shopify Storefront');
 const APP_SLUG = pick(env.EXPO_PUBLIC_APP_SLUG, 'expo-shopify-storefront');
 const APP_SCHEME = pick(env.EXPO_PUBLIC_APP_SCHEME, 'shopstore');
 const BUNDLE_ID = pick(env.EXPO_PUBLIC_APP_BUNDLE_ID, 'com.example.storefront');
-const BRAND_PRIMARY = pick(env.EXPO_PUBLIC_BRAND_PRIMARY, '#0a7ea4');
 const APP_BACKGROUND = pick(env.EXPO_PUBLIC_APP_BACKGROUND, '#ffffff');
 const COLOR_SCHEME = pick(env.EXPO_PUBLIC_APP_COLOR_SCHEME, 'system');
 
@@ -100,7 +99,6 @@ export default (): ExpoConfig => ({
           ],
         }
       : {}),
-    permissions: ['com.google.android.gms.permission.AD_ID'],
   },
   plugins: [
     'expo-router',
@@ -113,9 +111,7 @@ export default (): ExpoConfig => ({
       },
     ],
     'expo-secure-store',
-    'expo-tracking-transparency',
     'expo-localization',
-    ['expo-notifications', { color: BRAND_PRIMARY }],
     ...onesignalPlugin,
   ],
   experiments: {
