@@ -43,12 +43,14 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 
   return (
     <SafeAreaProvider>
-      <StateView
-        mode="error"
-        message={error.message}
-        actionLabel="Try again"
-        onAction={retry}
-      />
+      <HeroUINativeProvider>
+        <StateView
+          mode="error"
+          message={error.message}
+          actionLabel="Try again"
+          onAction={retry}
+        />
+      </HeroUINativeProvider>
     </SafeAreaProvider>
   );
 }
