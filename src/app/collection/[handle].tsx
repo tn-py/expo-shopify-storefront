@@ -8,7 +8,7 @@ import {
   getSupportedFilters,
   ProductCard,
 } from '@/components/commerce';
-import { ErrorState, LoadingState } from '@/components/screen-state';
+import { ErrorState } from '@/components/screen-state';
 import {
   AppButton,
   AppSurface,
@@ -62,7 +62,7 @@ export default function CollectionScreen() {
     if (collectionHandle) track('collection_viewed', { handle: collectionHandle });
   }, [collectionHandle]);
 
-  if (query.isPending) return <LoadingState label="Loading collection…" />;
+  if (query.isPending) return <CatalogSkeleton label="Loading collection" />;
   if (query.isError && !query.data) {
     return <ErrorState message={(query.error as Error).message} onRetry={query.refetch} />;
   }

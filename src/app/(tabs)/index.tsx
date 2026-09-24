@@ -1,10 +1,11 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CollectionCard, ProductCard } from '@/components/commerce';
-import { ErrorState, LoadingState } from '@/components/screen-state';
+import { CatalogSkeleton, CollectionCard, ProductCard } from '@/components/commerce';
+import { ErrorState } from '@/components/screen-state';
 import { AppButton, AppSurface, AppText, RemoteImage } from '@/components/ui';
 import {
   resolveHomeSections,
@@ -13,15 +14,19 @@ import {
   type StorefrontRoute,
 } from '@/config/storefront-ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { screen } from '@/lib/analytics';
 import { useCollections, useProducts, useShop } from '@/shopify/hooks';
+import { useWishlist } from '@/wishlist/wishlist';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const theme = useTheme();
   const shop = useShop();
   const collections = useCollections();
   const products = useProducts();
+  const { items: savedItems } = useWishlist();
 
   useEffect(() => screen('Home'), []);
 
@@ -35,7 +40,7 @@ export default function HomeScreen() {
   );
 
   if ((collections.isPending || products.isPending) && !sections.length) {
-    return <LoadingState label="Loading storefront…" />;
+    return <CatalogSkeleton label="Loading storefront" />;
   }
   if (collections.isError && products.isError) {
     return (
@@ -72,10 +77,24 @@ export default function HomeScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <StoreWordmark
-              name={shop.data?.name}
-              logoUrl={shop.data?.brand?.logo?.image?.url ?? null}
-            />
+            <View style={styles.headerTop}>
+              <StoreWordmark
+                name={shop.data?.name}
+                logoUrl={shop.data?.brand?.logo?.image?.url ?? null}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  savedItems.length > 0
+                    ? `Saved items, ${savedItems.length} saved`
+                    : 'Saved items'
+                }
+                onPress={() => router.push('/saved')}
+                hitSlop={8}
+                style={({ pressed }) => [styles.savedButton, pressed && styles.pressed]}>
+                <Ionicons name="heart-outline" size={22} color={theme.text} />
+              </Pressable>
+            </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Search catalog"
@@ -183,6 +202,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, borderRadius: 0 },
   content: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', gap: Spacing.four },
   header: { gap: Spacing.three, paddingHorizontal: Spacing.three },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
+  savedButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   logo: { width: 180, height: 44 },
   search: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.three },
   pressed: { opacity: 0.72 },
