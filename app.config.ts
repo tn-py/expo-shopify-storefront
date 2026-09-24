@@ -62,6 +62,26 @@ const onesignalPlugin: NonNullable<ExpoConfig['plugins']> = onesignalAppId
   ? [['onesignal-expo-plugin', { mode: onesignalMode }]]
   : [];
 
+/**
+ * Crash reporting via Sentry — only wired into the native build when
+ * `EXPO_PUBLIC_SENTRY_DSN` is set (see `src/lib/monitoring.ts`). `SENTRY_ORG` /
+ * `SENTRY_PROJECT` are optional and only needed for source-map upload.
+ */
+const sentryDsn = pick(env.EXPO_PUBLIC_SENTRY_DSN, '');
+const sentryOrg = pick(env.SENTRY_ORG, '');
+const sentryProject = pick(env.SENTRY_PROJECT, '');
+const sentryPlugin: NonNullable<ExpoConfig['plugins']> = sentryDsn
+  ? [
+      [
+        '@sentry/react-native/expo',
+        {
+          ...(sentryOrg ? { organization: sentryOrg } : {}),
+          ...(sentryProject ? { project: sentryProject } : {}),
+        },
+      ],
+    ]
+  : [];
+
 export default (): ExpoConfig => ({
   name: APP_NAME,
   slug: APP_SLUG,
@@ -75,6 +95,10 @@ export default (): ExpoConfig => ({
   ios: {
     bundleIdentifier: BUNDLE_ID,
     supportsTablet: true,
+    // The app only ever talks HTTPS (Storefront/Customer Account APIs, Checkout
+    // Sheet Kit) — no proprietary encryption, so skip the export-compliance
+    // prompt on every App Store Connect upload.
+    infoPlist: { ITSAppUsesNonExemptEncryption: false },
     ...(linkDomains.length
       ? { associatedDomains: linkDomains.map((d) => `applinks:${d}`) }
       : {}),
@@ -113,11 +137,19 @@ export default (): ExpoConfig => ({
     'expo-secure-store',
     'expo-localization',
     ...onesignalPlugin,
+    ...sentryPlugin,
   ],
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
   },
+  // OTA updates identify compatible builds by native fingerprint rather than a
+  // manually bumped `runtimeVersion` string. `updates.url` (and therefore the
+  // whole OTA channel wiring) only applies once the project is linked to EAS.
+  runtimeVersion: { policy: 'fingerprint' },
+  ...(env.EAS_PROJECT_ID?.trim()
+    ? { updates: { url: `https://u.expo.dev/${env.EAS_PROJECT_ID.trim()}` } }
+    : {}),
   extra: {
     router: {},
     ...(env.EAS_PROJECT_ID?.trim()

@@ -9,24 +9,47 @@ import {
   DefaultTheme,
   Stack,
   ThemeProvider,
+  type ErrorBoundaryProps,
   type Theme,
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { StateView } from '@/components/ui';
 import { AppColorScheme, Colors, Fonts } from '@/constants/theme';
 import { useResolvedScheme } from '@/hooks/use-theme';
+import { captureException, initMonitoring, wrapRoot } from '@/lib/monitoring';
+import { queryClient } from '@/lib/query-client';
 import { PushProvider } from '@/notifications/onesignal';
 import { AuthProvider } from '@/shopify/auth';
 import { CartProvider } from '@/shopify/cart';
 import { CheckoutEvents } from '@/shopify/checkout';
-import { queryClient } from '@/lib/query-client';
 import { initializeTheme } from '@/theme/initialize-theme';
 
 import '../../global.css';
 
 initializeTheme();
+initMonitoring();
+
+/** Reported to Sentry (when configured) and shown instead of a blank/crashed screen. */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    captureException(error, { boundary: 'root-layout' });
+  }, [error]);
+
+  return (
+    <SafeAreaProvider>
+      <StateView
+        mode="error"
+        message={error.message}
+        actionLabel="Try again"
+        onAction={retry}
+      />
+    </SafeAreaProvider>
+  );
+}
 
 function makeNavTheme(scheme: 'light' | 'dark'): Theme {
   const c = Colors[scheme];
@@ -57,7 +80,7 @@ const checkoutColorScheme =
       ? ColorScheme.dark
       : ColorScheme.automatic;
 
-export default function RootLayout() {
+function RootLayout() {
   const scheme = useResolvedScheme();
   const theme = Colors[scheme];
 
@@ -107,3 +130,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapRoot(RootLayout);

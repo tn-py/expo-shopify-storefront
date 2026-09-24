@@ -1,6 +1,15 @@
 import '@testing-library/react-native/dist/matchers/extend-expect';
 import { cleanup } from '@testing-library/react-native/pure';
 
+// The real package pulls in @sentry/core's ESM build, which Jest can't parse
+// without extra transform config; a lightweight mock keeps tests deterministic
+// and avoids sending anything to Sentry from the test run.
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  captureException: jest.fn(),
+  setUser: jest.fn(),
+  wrap: jest.fn((Component: unknown) => Component),
+}));
 jest.mock('react-native-worklets', () => require('react-native-worklets/src/mock'));
 jest.mock('react-native-reanimated', () => {
   const Reanimated = require('react-native-reanimated/mock');
