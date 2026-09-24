@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussions
+    url: https://github.com/tn-py/expo-shopify-storefront/discussions
+    about: Ask questions, share what you built, or discuss an idea before opening an issue.
+  - name: Security policy
+    url: https://github.com/tn-py/expo-shopify-storefront/security/policy
+    about: Report a security vulnerability privately — please don't open a public issue for it.
