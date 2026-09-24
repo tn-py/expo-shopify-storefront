@@ -28,6 +28,7 @@ import { AuthProvider } from '@/shopify/auth';
 import { CartProvider } from '@/shopify/cart';
 import { CheckoutEvents } from '@/shopify/checkout';
 import { initializeTheme } from '@/theme/initialize-theme';
+import { WishlistProvider } from '@/wishlist/wishlist';
 
 import '../../global.css';
 
@@ -98,32 +99,35 @@ function RootLayout() {
               <AuthProvider>
                 <PushProvider>
                   <CartProvider>
-                    <ThemeProvider value={makeNavTheme(scheme)}>
-                      <CheckoutEvents />
-                      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-                      <Stack
-                        screenOptions={{
-                          headerBackButtonDisplayMode: 'minimal',
-                          headerTintColor: theme.primary,
-                          headerTitleStyle: {
-                            fontFamily: Fonts.semibold,
-                            color: theme.text,
-                          },
-                          headerShadowVisible: false,
-                          contentStyle: { backgroundColor: theme.background },
-                        }}>
-                        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                        <Stack.Screen name="product/[handle]" options={{ title: '' }} />
-                        <Stack.Screen name="collection/[handle]" options={{ title: '' }} />
-                        <Stack.Screen name="account/orders" options={{ title: 'Orders' }} />
-                        <Stack.Screen name="account/order/[id]" options={{ title: 'Order' }} />
-                        <Stack.Screen name="account/addresses" options={{ title: 'Addresses' }} />
-                        <Stack.Screen
-                          name="order-confirmed"
-                          options={{ headerShown: false, presentation: 'fullScreenModal' }}
-                        />
-                      </Stack>
-                    </ThemeProvider>
+                    <WishlistProvider>
+                      <ThemeProvider value={makeNavTheme(scheme)}>
+                        <CheckoutEvents />
+                        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+                        <Stack
+                          screenOptions={{
+                            headerBackButtonDisplayMode: 'minimal',
+                            headerTintColor: theme.primary,
+                            headerTitleStyle: {
+                              fontFamily: Fonts.semibold,
+                              color: theme.text,
+                            },
+                            headerShadowVisible: false,
+                            contentStyle: { backgroundColor: theme.background },
+                          }}>
+                          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                          <Stack.Screen name="product/[handle]" options={{ title: '' }} />
+                          <Stack.Screen name="collection/[handle]" options={{ title: '' }} />
+                          <Stack.Screen name="saved" options={{ title: 'Saved' }} />
+                          <Stack.Screen name="account/orders" options={{ title: 'Orders' }} />
+                          <Stack.Screen name="account/order/[id]" options={{ title: 'Order' }} />
+                          <Stack.Screen name="account/addresses" options={{ title: 'Addresses' }} />
+                          <Stack.Screen
+                            name="order-confirmed"
+                            options={{ headerShown: false, presentation: 'fullScreenModal' }}
+                          />
+                        </Stack>
+                      </ThemeProvider>
+                    </WishlistProvider>
                   </CartProvider>
                 </PushProvider>
               </AuthProvider>
