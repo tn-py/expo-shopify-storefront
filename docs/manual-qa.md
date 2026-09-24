@@ -14,9 +14,37 @@ the shortest reproduction path.
 - [ ] `npm test -- --runInBand` completes with zero failing suites.
 - [ ] `npm run typecheck` and `npm run lint` complete with zero errors.
 - [ ] `npm run doctor` reports no actionable dependency/configuration issues.
+- [ ] `npm run check:env` against a filled `.env` reports no errors and successfully
+      pings the Storefront API; against the untouched `.env.example` copy it reports
+      the blank token as an error and exits non-zero.
 - [ ] `npx expo export --platform ios --output-dir /tmp/uhs-export-ios` succeeds.
 - [ ] `npx expo export --platform android --output-dir /tmp/uhs-export-android` succeeds.
+- [ ] `npx expo export --platform android` succeeds with a blank
+      `EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN` / `_STOREFRONT_TOKEN` (demo mode must bundle
+      without throwing at import time).
 - [ ] A fresh iOS install reaches Home, and a fresh Android install reaches Home.
+- [ ] `.maestro/smoke-browse.yaml` and `.maestro/search.yaml` pass against a dev/preview
+      build (`maestro test -e APP_ID=<bundle id> .maestro/` — see
+      [e2e.md](./e2e.md)).
+
+## Demo mode
+
+Run with `.env` unfilled (or `cp .env.example .env`) — the default is demo mode on.
+
+- [ ] With no store configured, Home/Shop/Search/Cart show mock.shop's sample catalog
+      instead of the setup wall.
+- [ ] The "Demo store · Connect yours" pill appears just above the tab bar, doesn't
+      shift any screen's layout, and is reachable by screen reader as a labeled
+      button.
+- [ ] Tapping the pill opens `/setup` as a modal with the step-by-step connection
+      guide; dismissing the pill hides it for the app session, and it's back after a
+      fresh launch.
+- [ ] Setting `EXPO_PUBLIC_DEMO_MODE=off` with nothing configured shows the setup
+      wall instead (no pill, no catalog).
+- [ ] Filling in a real store domain + token shows that store regardless of
+      `EXPO_PUBLIC_DEMO_MODE`, with no demo pill.
+- [ ] See [demo-mode.md](./demo-mode.md) for what's expected to differ (checkout,
+      accounts) while in demo mode — don't file those as bugs.
 
 ## Visual and responsive coverage
 
