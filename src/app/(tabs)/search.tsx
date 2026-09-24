@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Link } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -14,6 +15,7 @@ import { AppButton, AppSearchField, AppSurface, AppText, CatalogGrid, Selectable
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { usePaginationLock } from '@/hooks/use-pagination-lock';
 import { screen, track } from '@/lib/analytics';
+import { addRecentSearch, parseRecentSearches, RECENT_SEARCHES_STORAGE_KEY, serializeRecentSearches } from '@/lib/recent-searches';
 import { usePredictiveSearch, useSearchProducts } from '@/shopify/hooks';
 
 function useDebounced<T>(value: T, delay = 250): T {
@@ -31,6 +33,7 @@ export default function SearchScreen() {
   const columns = getCatalogColumnCount(width);
   const [draftQuery, setDraftQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const debouncedDraft = useDebounced(draftQuery.trim());
   const predictive = usePredictiveSearch(debouncedDraft);
   const submitted = useSearchProducts(submittedQuery);
@@ -41,6 +44,18 @@ export default function SearchScreen() {
   });
 
   useEffect(() => screen('Search'), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(RECENT_SEARCHES_STORAGE_KEY)
+      .then((raw) => {
+        if (!cancelled) setRecentSearches(parseRecentSearches(raw));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const submittedProducts = useMemo(
     () => submitted.data?.pages.flatMap((page) => page.search.nodes) ?? [],
@@ -66,11 +81,21 @@ export default function SearchScreen() {
     setDraftQuery(query);
     setSubmittedQuery(query);
     track('search', { query });
+    setRecentSearches((current) => {
+      const next = addRecentSearch(current, query);
+      void AsyncStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, serializeRecentSearches(next)).catch(() => {});
+      return next;
+    });
   };
 
   const clearSearch = () => {
     setDraftQuery('');
     setSubmittedQuery('');
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    void AsyncStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY).catch(() => {});
   };
 
   const firstPageError =
@@ -129,7 +154,22 @@ export default function SearchScreen() {
           ) : presentation.mode === 'empty-results' ? (
             <EmptyState title="No matches" subtitle={`Nothing found for “${presentation.query}”.`} />
           ) : presentation.mode === 'idle' ? (
-            <EmptyState title="Search the catalog" subtitle="Enter at least two characters, then submit for full results." />
+            <View style={styles.idle}>
+              {recentSearches.length ? (
+                <View style={styles.recentSearches}>
+                  <View style={styles.recentHeader}>
+                    <AppText variant="labelStrong">Recent searches</AppText>
+                    <AppButton label="Clear" variant="tertiary" onPress={clearRecentSearches} />
+                  </View>
+                  <View style={styles.suggestions}>
+                    {recentSearches.map((query) => (
+                      <SelectableChip key={query} label={query} onPress={() => submitSearch(query)} />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              <EmptyState title="Search the catalog" subtitle="Enter at least two characters, then submit for full results." />
+            </View>
           ) : (
             <EmptyState title="No suggestions yet" subtitle="Submit your search to check the full catalog." />
           )
@@ -229,6 +269,9 @@ const styles = StyleSheet.create({
   list: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', padding: Spacing.two, paddingBottom: Spacing.six },
   row: { alignItems: 'stretch' },
   header: { gap: Spacing.two, padding: Spacing.one, paddingBottom: Spacing.three },
+  idle: { gap: Spacing.four },
+  recentSearches: { gap: Spacing.two, padding: Spacing.two },
+  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   collections: { gap: Spacing.one },
   collectionLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
