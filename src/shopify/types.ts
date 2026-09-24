@@ -89,10 +89,30 @@ export interface ProductConnection<T> extends Connection<T> {
 
 /* ---- Cart ---- */
 
+export interface CartWarning {
+  code: string;
+  message: string;
+  target: string;
+}
+
+/** A cart- or line-level discount allocation — `code` for a code discount, `title` for an automatic one. */
+export interface CartDiscountAllocation {
+  discountedAmount: Money;
+  code?: string;
+  title?: string;
+}
+
+export interface CartDiscountCode {
+  code: string;
+  /** False when Shopify accepted the code but it doesn't currently apply (e.g. unmet minimum). */
+  applicable: boolean;
+}
+
 export interface CartLine {
   id: string;
   quantity: number;
   cost: { totalAmount: Money; amountPerQuantity: Money };
+  discountAllocations: CartDiscountAllocation[];
   merchandise: {
     id: string;
     title: string;
@@ -107,11 +127,12 @@ export interface Cart {
   id: string;
   checkoutUrl: string;
   totalQuantity: number;
-  buyerIdentity?: { email: string | null } | null;
+  buyerIdentity?: { email: string | null; countryCode: string | null } | null;
+  discountCodes: CartDiscountCode[];
+  discountAllocations: CartDiscountAllocation[];
   cost: {
     subtotalAmount: Money;
     totalAmount: Money;
-    totalTaxAmount: Money | null;
   };
   lines: { nodes: CartLine[] };
 }
