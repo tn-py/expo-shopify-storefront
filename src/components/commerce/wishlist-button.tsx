@@ -12,10 +12,13 @@ import { useWishlist } from '@/wishlist/wishlist';
 export function WishlistButton({
   product,
   size = 22,
+  overlay = false,
   style,
 }: {
   product: ProductCardData;
   size?: number;
+  /** Adds a theme-aware backdrop so the icon stays legible over product imagery. */
+  overlay?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const { isSaved, toggle } = useWishlist();
@@ -29,7 +32,7 @@ export function WishlistButton({
       accessibilityState={{ selected: saved }}
       hitSlop={8}
       onPress={() => toggle(product)}
-      style={[styles.button, style]}>
+      style={[styles.button, overlay && [styles.overlay, { backgroundColor: theme.background }], style]}>
       <Ionicons
         name={saved ? 'heart' : 'heart-outline'}
         size={size}
@@ -41,4 +44,5 @@ export function WishlistButton({
 
 const styles = StyleSheet.create({
   button: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  overlay: { borderRadius: 999, opacity: 0.92 },
 });

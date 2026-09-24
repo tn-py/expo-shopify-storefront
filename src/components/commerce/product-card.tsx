@@ -86,7 +86,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       </Link>
       {/* A sibling pressable (not nested in the Link above) so the heart
           toggle doesn't also trigger navigation. */}
-      <WishlistButton product={product} size={18} style={styles.heart} />
+      <WishlistButton product={product} size={18} overlay style={styles.heart} />
     </View>
   );
 }
@@ -105,7 +105,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Spacing.one,
     right: Spacing.one,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 999,
   },
 });
