@@ -118,6 +118,7 @@ function RootLayout() {
                         <Stack.Screen name="account/orders" options={{ title: 'Orders' }} />
                         <Stack.Screen name="account/order/[id]" options={{ title: 'Order' }} />
                         <Stack.Screen name="account/addresses" options={{ title: 'Addresses' }} />
+                        <Stack.Screen name="setup" options={{ title: 'Connect your store', presentation: 'modal' }} />
                         <Stack.Screen
                           name="order-confirmed"
                           options={{ headerShown: false, presentation: 'fullScreenModal' }}

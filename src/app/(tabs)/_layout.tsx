@@ -2,11 +2,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, type ColorValue } from 'react-native';
 
+import { DemoBanner } from '@/components/demo-banner';
 import { SetupRequired } from '@/components/setup-required';
 import { Brand, Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useCart } from '@/shopify/cart';
-import { isStorefrontConfigured } from '@/shopify/env';
+import { isDemoStore, isStorefrontUsable } from '@/shopify/env';
 
 function CartIcon({ color, size }: { color: ColorValue; size: number }) {
   const { totalQuantity } = useCart();
@@ -25,68 +26,76 @@ function CartIcon({ color, size }: { color: ColorValue; size: number }) {
 export default function TabsLayout() {
   const theme = useTheme();
 
-  if (!isStorefrontConfigured) return <SetupRequired />;
+  // Demo mode (see `src/shopify/env.ts`) renders the real storefront against
+  // Shopify's public mock.shop sample catalog; only fall back to the setup
+  // wall when there's truly nothing to show (demo mode off, no store
+  // configured).
+  if (!isStorefrontUsable) return <SetupRequired />;
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.textSecondary,
-        tabBarLabelStyle: { fontFamily: Fonts.medium, fontSize: 11 },
-        tabBarStyle: {
-          backgroundColor: theme.background,
-          borderTopColor: theme.border,
-        },
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="shop"
-        options={{
-          title: 'Shop',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="cart"
-        options={{
-          title: 'Cart',
-          tabBarIcon: ({ color, size }) => <CartIcon color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="account"
-        options={{
-          title: 'Account',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" color={color} size={size} />
-          ),
-        }}
-      />
-    </Tabs>
+    <View style={styles.root}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: theme.primary,
+          tabBarInactiveTintColor: theme.textSecondary,
+          tabBarLabelStyle: { fontFamily: Fonts.medium, fontSize: 11 },
+          tabBarStyle: {
+            backgroundColor: theme.background,
+            borderTopColor: theme.border,
+          },
+        }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="home-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="shop"
+          options={{
+            title: 'Shop',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="grid-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: 'Search',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="search-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="cart"
+          options={{
+            title: 'Cart',
+            tabBarIcon: ({ color, size }) => <CartIcon color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="account"
+          options={{
+            title: 'Account',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="person-outline" color={color} size={size} />
+            ),
+          }}
+        />
+      </Tabs>
+      {isDemoStore ? <DemoBanner /> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   badge: {
     position: 'absolute',
     top: -6,

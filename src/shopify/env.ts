@@ -55,3 +55,21 @@ export const isStorefrontConfigured =
 export const isCustomerAccountConfigured =
   ShopifyEnv.customerAccountClientId.length > 0 &&
   ShopifyEnv.shopId.length > 0;
+
+/**
+ * `EXPO_PUBLIC_DEMO_MODE` — on by default. Set to `off` to always show the
+ * setup wall instead of falling back to the mock.shop demo store when no
+ * Storefront API credentials are configured.
+ */
+const demoModeEnv = process.env.EXPO_PUBLIC_DEMO_MODE?.trim().toLowerCase() ?? '';
+
+/**
+ * `true` when there's no configured store but the app can still show a
+ * working storefront by talking to Shopify's public mock.shop demo API (see
+ * `src/shopify/client.ts`). Demo mode is on by default and only turns off
+ * when a real store is configured or `EXPO_PUBLIC_DEMO_MODE=off`.
+ */
+export const isDemoStore = !isStorefrontConfigured && demoModeEnv !== 'off';
+
+/** Whether the app has a storefront to render at all — real or demo. */
+export const isStorefrontUsable = isStorefrontConfigured || isDemoStore;
