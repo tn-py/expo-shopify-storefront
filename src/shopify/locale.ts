@@ -1,8 +1,6 @@
 /**
  * Shopify Storefront API `@inContext(country, language)` locale — derived from
- * the device's locale via `expo-localization`, overridable per `.env`. Later
- * agents attach `@inContext` to queries using this; this module never touches
- * the GraphQL operations itself.
+ * the device's locale via `expo-localization`, overridable per `.env`.
  */
 
 import { getLocales } from 'expo-localization';
@@ -62,4 +60,16 @@ export const storefrontLocale: StorefrontLocale | null =
 /** The device's current locale as a BCP-47 tag, e.g. `en-US`. Falls back to `en-US`. */
 export function deviceLocaleTag(): string {
   return deviceLocale()?.languageTag || 'en-US';
+}
+
+/**
+ * Variables for operations that declare
+ * `($country: CountryCode, $language: LanguageCode) @inContext(country: $country, language: $language)`.
+ * Spread into the request variables; empty when localization is off, so both
+ * arguments resolve to null and Shopify uses the store's primary market.
+ */
+export function inContextVariables(): { country?: string; language?: string } {
+  return storefrontLocale
+    ? { country: storefrontLocale.country, language: storefrontLocale.language }
+    : {};
 }
