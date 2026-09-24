@@ -24,9 +24,14 @@ import { captureException, initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { queryClient } from '@/lib/query-client';
 import { initQueryLifecycle } from '@/lib/query-lifecycle';
 import { PushProvider } from '@/notifications/onesignal';
+import {
+  AcceleratedCheckoutConfigurator,
+  acceleratedCheckoutConfiguration,
+} from '@/shopify/accelerated-checkout-config';
 import { AuthProvider } from '@/shopify/auth';
 import { CartProvider } from '@/shopify/cart';
 import { CheckoutEvents } from '@/shopify/checkout';
+import { ShopifyEnv } from '@/shopify/env';
 import { initializeTheme } from '@/theme/initialize-theme';
 
 import '../../global.css';
@@ -94,12 +99,19 @@ function RootLayout() {
         <HeroUINativeProvider>
           <QueryClientProvider client={queryClient}>
             <ShopifyCheckoutSheetProvider
-              configuration={{ colorScheme: checkoutColorScheme, preloading: true }}>
+              configuration={{
+                colorScheme: checkoutColorScheme,
+                preloading: true,
+                ...(ShopifyEnv.acceleratedCheckoutEnabled
+                  ? { acceleratedCheckouts: acceleratedCheckoutConfiguration(null) }
+                  : {}),
+              }}>
               <AuthProvider>
                 <PushProvider>
                   <CartProvider>
                     <ThemeProvider value={makeNavTheme(scheme)}>
                       <CheckoutEvents />
+                      <AcceleratedCheckoutConfigurator />
                       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
                       <Stack
                         screenOptions={{

@@ -1,3 +1,4 @@
+export { WalletCheckoutButtons } from './accelerated-checkout';
 export { CollectionCard } from './collection-card';
 export { CatalogSkeleton } from './catalog-skeleton';
 export { ProductCard } from './product-card';
