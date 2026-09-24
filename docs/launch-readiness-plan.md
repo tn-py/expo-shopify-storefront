@@ -144,3 +144,40 @@ Merge each wave, resolve conflicts, run the full checks plus
 - Requesting `write_cart_wallet_payments` and an Apple merchant id to demo
   accelerated checkouts.
 - Setting the GitHub repo to public, adding topics, and marking it as a template repository.
+
+## 7. Status
+
+Shipped, by wave (see `git log` for the full commit-level detail; a
+human-readable summary is in `CHANGELOG.md`'s `[Unreleased]` section):
+
+- **Wave 1 (Platform & dependencies):** unused deps/plugins/`AD_ID` permission
+  and dead code removed; `expo-updates` (fingerprint runtime), `expo-haptics`,
+  `expo-network`, and optional `@sentry/react-native` added; React Query
+  focus/online managers wired up; `src/shopify/locale.ts` + locale-aware
+  `formatMoney`; `ITSAppUsesNonExemptEncryption: false`.
+- **Wave 2 (Features, 3 agents in parallel):**
+  - **Checkout & accounts:** authenticated checkout via
+    `customerAccessToken` buyer identity, sign-out privacy (guest-cart
+    rebuild + Shopify logout call), discount codes with allocations, cart
+    `warnings` surfaced, deprecated `totalTaxAmount` removed, `@inContext` +
+    `countryCode` on cart operations, GID-based analytics identity, opt-in
+    accelerated checkout (iOS).
+  - **Catalog & discovery:** `@inContext` on catalog queries, product
+    recommendations rail, prefetch + placeholder PDP, share/haptics/gallery
+    indicator/"View cart" affordance, local wishlist with a Saved screen,
+    recent searches.
+  - **Demo mode & DX:** mock.shop demo transport with a demo banner,
+    `npm run check:env`, Maestro smoke flows.
+- **Wave 3 (Launch, 2 agents in parallel):**
+  - **Docs (this agent):** README overhaul, `docs/architecture.md`,
+    `docs/customization.md`, `SECURITY.md`, `CHANGELOG.md`,
+    `CONTRIBUTING.md`/`AGENTS.md` updates, `docs/manual-qa.md` additions,
+    `docs/media/README.md`, issue templates, this status section.
+  - **CI/CD:** export smoke jobs, Dependabot, EAS Workflows examples,
+    `docs/release-checklist.md` — see that agent's own changes for scope and
+    status; this document doesn't track them in detail.
+
+Still open — the "Needs the maintainer" list in §6 above, unchanged by any
+wave (none of it can be done from a sandboxed agent: it needs a live Shopify
+store, real devices, Apple/Shopify merchant-side approvals, and GitHub repo
+settings only an owner can change).
