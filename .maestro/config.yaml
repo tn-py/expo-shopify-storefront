@@ -1,0 +1,7 @@
+# Maestro workspace config — picked up automatically when running
+# `maestro test .maestro/` (or `maestro test .maestro/config.yaml`).
+# Declares which files in this directory are flows, so this config file
+# itself (and any future non-flow helper file) isn't run as one.
+flows:
+  - "smoke-browse.yaml"
+  - "search.yaml"
