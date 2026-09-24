@@ -32,6 +32,7 @@ jest.mock('@/lib/analytics', () => ({
   resetAnalytics: jest.fn(),
   track: jest.fn(),
 }));
+jest.mock('@/lib/monitoring', () => ({ setMonitoringUser: jest.fn() }));
 jest.mock('@/notifications/onesignal', () => ({
   identifyPushUser: jest.fn(),
   resetPushUser: jest.fn(),
@@ -51,6 +52,8 @@ const mockSecureStore = SecureStore as jest.Mocked<typeof SecureStore>;
 const mockAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 const mockAuthSession = AuthSession as jest.Mocked<typeof AuthSession>;
 const mockRouter = jest.requireMock('expo-router').router as { replace: jest.Mock };
+const mockIdentify = jest.requireMock('@/lib/analytics').identify as jest.Mock;
+const mockSetMonitoringUser = jest.requireMock('@/lib/monitoring').setMonitoringUser as jest.Mock;
 const mockFetch = jest.fn();
 globalThis.fetch = mockFetch;
 let latestAuth: AuthContextValue | null = null;
@@ -222,6 +225,51 @@ it('surfaces profile load failure and recovers through an explicit retry', async
   expect(latestAuth?.customer?.emailAddress).toBe('member@example.com');
 });
 
+it('identifies analytics by the stable Shopify customer GID, sending email only as a property', async () => {
+  mockFetch.mockResolvedValueOnce({
+    json: async () => ({
+      data: {
+        customer: {
+          id: 'gid://shopify/Customer/1',
+          firstName: 'Morgan',
+          lastName: null,
+          emailAddress: { emailAddress: 'member@example.com' },
+        },
+      },
+    }),
+  });
+  await renderAuth();
+
+  await waitFor(() => expect(latestAuth?.customerProfileStatus).toBe('ready'));
+
+  expect(mockIdentify).toHaveBeenCalledWith('gid://shopify/Customer/1', { email: 'member@example.com' });
+  expect(mockIdentify).not.toHaveBeenCalledWith('member@example.com', expect.anything());
+  expect(mockSetMonitoringUser).toHaveBeenCalledWith('gid://shopify/Customer/1');
+});
+
+it('clears the monitoring user on sign-out', async () => {
+  mockFetch.mockResolvedValueOnce({
+    json: async () => ({
+      data: {
+        customer: {
+          id: 'gid://shopify/Customer/1',
+          firstName: 'Morgan',
+          lastName: null,
+          emailAddress: { emailAddress: 'member@example.com' },
+        },
+      },
+    }),
+  });
+  await renderAuth();
+  await waitFor(() => expect(latestAuth?.customerProfileStatus).toBe('ready'));
+
+  await act(async () => {
+    await latestAuth!.signOut();
+  });
+
+  expect(mockSetMonitoringUser).toHaveBeenLastCalledWith(null);
+});
+
 it('removes protected customer data and navigation when signing out', async () => {
   mockFetch.mockResolvedValueOnce({
     json: async () => ({
@@ -249,6 +297,51 @@ it('removes protected customer data and navigation when signing out', async () =
   });
 
   expect(queryClient.getQueriesData({ queryKey: ['customer'] })).toEqual([]);
+  expect(mockRouter.replace).toHaveBeenCalledWith('/account');
+  // No id token was stored, so no best-effort remote logout call is made —
+  // only the earlier profile-load fetch happened.
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+});
+
+it('makes a best-effort call to Shopify’s end-session endpoint on sign-out when an id token is stored', async () => {
+  mockSecureStore.getItemAsync.mockResolvedValue(JSON.stringify({
+    accessToken: 'token',
+    refreshToken: null,
+    idToken: 'id-token-abc',
+    expiresAt: Date.now() + 3_600_000,
+  }));
+  mockFetch.mockResolvedValue({ json: async () => ({}) });
+  await renderAuth();
+  await waitFor(() => expect(latestAuth?.ready).toBe(true));
+
+  await act(async () => {
+    await latestAuth!.signOut();
+  });
+
+  await waitFor(() => expect(mockFetch).toHaveBeenCalledWith(
+    'https://account.example.com/logout?id_token_hint=id-token-abc',
+  ));
+});
+
+it('never lets a hanging or failed remote logout call block or fail local sign-out', async () => {
+  mockSecureStore.getItemAsync.mockResolvedValue(JSON.stringify({
+    accessToken: 'token',
+    refreshToken: null,
+    idToken: 'id-token-abc',
+    expiresAt: Date.now() + 3_600_000,
+  }));
+  mockFetch.mockImplementation((url: string) => {
+    if (url.includes('/logout')) return new Promise(() => undefined); // never resolves
+    return Promise.resolve({ json: async () => ({}) });
+  });
+  await renderAuth();
+  await waitFor(() => expect(latestAuth?.ready).toBe(true));
+
+  await act(async () => {
+    await latestAuth!.signOut();
+  });
+
+  expect(latestAuth?.isAuthenticated).toBe(false);
   expect(mockRouter.replace).toHaveBeenCalledWith('/account');
 });
 
