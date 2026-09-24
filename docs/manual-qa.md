@@ -82,6 +82,43 @@ in light, dark, and system appearance on each platform.
       Checkout Sheet/network failure shows a retry path and does not clear the cart.
 - [ ] A completed test checkout clears the cart and shows only the non-sensitive
       confirmation fields supplied by Shopify, with accurate guest/member actions.
+- [ ] **Authenticated checkout:** signed in with a customer that has a saved
+      address and a vaulted payment method on the test store, Checkout opens
+      already signed in and offers that saved address/payment method — not a
+      guest checkout. See [customer-accounts.md](./customer-accounts.md#authenticated-checkout).
+- [ ] A valid discount code applies and its allocation is shown on the cart
+      totals; removing it recalculates the total; an invalid/expired code
+      shows a clear error and leaves the cart unchanged.
+- [ ] A cart mutation that returns Shopify `warnings` (e.g. a quantity capped
+      by inventory) surfaces the warning non-blockingly (haptic + message)
+      without failing the operation or clearing the cart.
+- [ ] **Accelerated checkout (iOS only):** with
+      `EXPO_PUBLIC_SHOPIFY_ACCELERATED_CHECKOUT=true` and a fresh dev-client
+      build, a Shop Pay button (and Apple Pay, if
+      `EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID` is set) renders above the regular
+      checkout button on the cart screen on iOS 16+; completing a purchase
+      through it clears the cart and lands on order-confirmed, same as the
+      regular Checkout Sheet. On Android, or with the env var unset, no
+      wallet button renders and the regular checkout button is unaffected.
+      See [accelerated-checkout.md](./accelerated-checkout.md).
+
+## Wishlist, recent searches, and recommendations
+
+- [ ] Tapping the heart on a product card and on the PDP saves/unsaves the
+      item; the two stay in sync for the same product.
+- [ ] The Saved screen lists saved items, refreshes their live
+      price/availability from Shopify, and reflects removals immediately.
+- [ ] The wishlist heart icon and its backdrop are legible in **both** light
+      and dark mode against light and dark product photography (regression
+      check for the dark-mode backdrop fix).
+- [ ] A submitted search adds a recent-search chip; re-opening Search shows
+      recent chips on the idle state, most-recent first, capped and
+      de-duplicated; tapping a chip re-runs that search.
+- [ ] The PDP's recommendations rail shows related products when Shopify
+      returns any, and simply doesn't render when it returns none or errors
+      (non-fatal — doesn't block the rest of the PDP).
+- [ ] The PDP's share action opens the native share sheet with a working
+      product link.
 
 ## Account privacy and authentication
 
@@ -100,6 +137,12 @@ in light, dark, and system appearance on each platform.
       placeholder, pagination page, error, or stale deep-link detail appears.
 - [ ] An expired refresh token removes protected data and returns to Account just
       like explicit sign-out.
+- [ ] **Sign-out clears cart identity:** add an item while signed in as customer
+      A, sign out, then inspect the cart (e.g. via a Storefront API cart query
+      or the Shopify admin) — it must be a **new guest cart** with A's line
+      items but no trace of A's buyer identity (no email/customer token), and
+      the old cart id must no longer be the one persisted on-device. Repeat
+      offline: the local cart is cleared rather than leaking A's identity.
 
 ## Orders and addresses
 
