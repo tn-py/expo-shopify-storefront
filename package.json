@@ -81,7 +81,10 @@
     "test": "jest",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "doctor": "npx --yes expo-doctor@1.19.12"
+    "doctor": "npx --yes expo-doctor@1.19.12",
+    "check:env": "node --env-file-if-exists=.env scripts/check-env.mjs",
+    "verify": "npm run typecheck && npm run lint && npm test -- --runInBand",
+    "e2e": "echo 'Run: maestro test -e APP_ID=<your bundle id> .maestro/  (see docs/e2e.md)' && maestro test -e APP_ID=${APP_ID:-com.example.storefront} .maestro/"
   },
   "private": true
 }

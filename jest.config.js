@@ -2,7 +2,13 @@
 module.exports = {
   preset: 'jest-expo',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
-  testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/*.test.tsx'],
+  testMatch: [
+    '<rootDir>/src/**/*.test.ts',
+    '<rootDir>/src/**/*.test.tsx',
+    '<rootDir>/scripts/**/*.test.js',
+    '<rootDir>/scripts/**/*.test.cjs',
+    '<rootDir>/scripts/**/*.test.mjs',
+  ],
   moduleNameMapper: {
     '^@testing-library/react-native$': '<rootDir>/test/testing-library.tsx',
     '^@/(.*)$': '<rootDir>/src/$1',
