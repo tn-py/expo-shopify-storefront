@@ -42,6 +42,40 @@ function completionParams(event: CheckoutCompletedEvent): ConfirmationParams {
   };
 }
 
+/**
+ * Shared by every surface that can complete a Shopify Checkout — the sheet
+ * (`CheckoutEvents`, below) and the accelerated checkout wallet buttons
+ * (`WalletCheckoutButtons`) — so completion (track, clear cart, navigate) is
+ * handled identically regardless of which one presented checkout.
+ */
+export function handleCheckoutCompletion(
+  event: CheckoutCompletedEvent,
+  deps: { clearLocal: () => Promise<void>; navigateToConfirmation: (params: ConfirmationParams) => void },
+): void {
+  const params = completionParams(event);
+  const purchaseTotal = Number(event.orderDetails.cart.price.total?.amount);
+  const currency = event.orderDetails.cart.price.total?.currencyCode;
+  track('purchase', {
+    order_id: params.orderId,
+    ...(Number.isFinite(purchaseTotal) ? { total: purchaseTotal } : {}),
+    ...(currency ? { currency } : {}),
+  });
+  void deps.clearLocal();
+  deps.navigateToConfirmation(params);
+}
+
+export function navigateToConfirmation(
+  router: ReturnType<typeof useRouter>,
+  params: ConfirmationParams,
+): void {
+  router.replace({
+    pathname: '/order-confirmed',
+    params: Object.fromEntries(
+      Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    ),
+  });
+}
+
 /** Mount once so completion clears the cart and navigates even as routes change. */
 export function CheckoutEvents() {
   const checkout = useShopifyCheckoutSheet();
@@ -52,20 +86,9 @@ export function CheckoutEvents() {
     const completed = checkout.addEventListener(
       'completed',
       (event: CheckoutCompletedEvent) => {
-        const params = completionParams(event);
-        const purchaseTotal = Number(event.orderDetails.cart.price.total?.amount);
-        const currency = event.orderDetails.cart.price.total?.currencyCode;
-        track('purchase', {
-          order_id: params.orderId,
-          ...(Number.isFinite(purchaseTotal) ? { total: purchaseTotal } : {}),
-          ...(currency ? { currency } : {}),
-        });
-        void clearLocal();
-        router.replace({
-          pathname: '/order-confirmed',
-          params: Object.fromEntries(
-            Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1])),
-          ),
+        handleCheckoutCompletion(event, {
+          clearLocal,
+          navigateToConfirmation: (params) => navigateToConfirmation(router, params),
         });
       },
     );

@@ -44,6 +44,16 @@ export const ShopifyEnv = {
   country: process.env.EXPO_PUBLIC_SHOPIFY_COUNTRY?.trim() ?? '',
   language: process.env.EXPO_PUBLIC_SHOPIFY_LANGUAGE?.trim() ?? '',
   localize: process.env.EXPO_PUBLIC_SHOPIFY_LOCALIZE?.trim() ?? 'device',
+  /**
+   * Accelerated checkout (Shop Pay / Apple Pay wallet buttons), opt-in and
+   * iOS-only — see `docs/accelerated-checkout.md`. Off by default: the
+   * merchant must request the `write_cart_wallet_payments` Storefront API
+   * scope from Shopify before enabling it.
+   */
+  acceleratedCheckoutEnabled:
+    (process.env.EXPO_PUBLIC_SHOPIFY_ACCELERATED_CHECKOUT?.trim() ?? '').toLowerCase() === 'true',
+  /** Apple merchant id (e.g. `merchant.com.example`) — Apple Pay is offered only when set; Shop Pay otherwise. */
+  applePayMerchantId: process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID?.trim() ?? '',
 } as const;
 
 export const isStorefrontConfigured =

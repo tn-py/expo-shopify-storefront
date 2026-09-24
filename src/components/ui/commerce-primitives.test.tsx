@@ -4,6 +4,7 @@ import { AppButton } from '@/components/ui/app-button';
 import { AppSearchField } from '@/components/ui/app-search-field';
 import { AppSurface } from '@/components/ui/app-surface';
 import { AppText } from '@/components/ui/app-text';
+import { AppTextField } from '@/components/ui/app-text-field';
 import { AppToast } from '@/components/ui/app-toast';
 import { AccountMenuRow } from '@/components/ui/account-menu-row';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
@@ -173,6 +174,40 @@ describe('commerce controls', () => {
     expect(chip).toBeSelected();
     expect(chip).toHaveStyle({ minHeight: 44 });
     expect(chip).toHaveStyle({ marginTop: 8 });
+  });
+
+  it('reports typed text and shows a labeled description', async () => {
+    const onChangeText = jest.fn();
+    const { getByLabelText, getByText } = await render(
+      <AppTextField
+        label="Discount code"
+        description="Applied at checkout"
+        accessibilityLabel="Discount code"
+        value=""
+        onChangeText={onChangeText}
+      />,
+    );
+
+    const input = getByLabelText('Discount code');
+    await fireEvent.changeText(input, 'WELCOME10');
+    expect(onChangeText).toHaveBeenCalledWith('WELCOME10');
+    expect(getByText('Applied at checkout')).toBeOnTheScreen();
+  });
+
+  it('shows a field error instead of the description and marks the field invalid', async () => {
+    const { getByText, queryByText } = await render(
+      <AppTextField
+        label="Discount code"
+        description="Applied at checkout"
+        errorMessage="This code isn’t valid."
+        accessibilityLabel="Discount code"
+        value="EXPIRED"
+        onChangeText={jest.fn()}
+      />,
+    );
+
+    expect(getByText('This code isn’t valid.')).toBeOnTheScreen();
+    expect(queryByText('Applied at checkout')).toBeNull();
   });
 
   it('keeps an account row semantic and touch-safe when caller props conflict', async () => {

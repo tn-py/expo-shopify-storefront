@@ -10,6 +10,41 @@ jest.mock('@sentry/react-native', () => ({
   setUser: jest.fn(),
   wrap: jest.fn((Component: unknown) => Component),
 }));
+// @shopify/checkout-sheet-kit ships its source as `.d.ts` files that double
+// as runtime modules (real enum values live there, not just types) — Metro's
+// resolver handles that, but Jest's plain CommonJS resolution can't parse
+// them. A lightweight mock keeps every screen that merely imports the
+// package (even indirectly, e.g. through a barrel file) safe to render in
+// tests; suites that exercise checkout-sheet-kit behavior directly (see
+// `src/shopify/checkout-hook.test.tsx`, `accelerated-checkout.test.tsx`)
+// override this with their own more detailed `jest.mock` call.
+jest.mock('@shopify/checkout-sheet-kit', () => ({
+  ColorScheme: { automatic: 'automatic', light: 'light', dark: 'dark', web: 'web_default' },
+  LogLevel: { debug: 'debug', error: 'error' },
+  AcceleratedCheckoutWallet: { shopPay: 'shopPay', applePay: 'applePay' },
+  ApplePayContactField: { email: 'email', phone: 'phone' },
+  ApplePayLabel: { plain: 'plain' },
+  ApplePayStyle: { automatic: 'automatic' },
+  RenderState: { Loading: 'loading', Rendered: 'rendered', Error: 'error' },
+  CheckoutExpiredError: class CheckoutExpiredError extends Error {},
+  CheckoutClientError: class CheckoutClientError extends Error {},
+  CheckoutHTTPError: class CheckoutHTTPError extends Error {},
+  ConfigurationError: class ConfigurationError extends Error {},
+  InternalError: class InternalError extends Error {},
+  GenericError: class GenericError extends Error {},
+  useShopifyCheckoutSheet: () => ({
+    preload: jest.fn(),
+    present: jest.fn(),
+    dismiss: jest.fn(),
+    invalidate: jest.fn(),
+    getConfig: jest.fn(async () => ({})),
+    setConfig: jest.fn(async () => undefined),
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    removeEventListeners: jest.fn(),
+  }),
+  ShopifyCheckoutSheetProvider: ({ children }: { children?: unknown }) => children ?? null,
+  AcceleratedCheckoutButtons: () => null,
+}));
 jest.mock('react-native-worklets', () => require('react-native-worklets/src/mock'));
 jest.mock('react-native-reanimated', () => {
   const Reanimated = require('react-native-reanimated/mock');

@@ -18,6 +18,9 @@ jest.mock('@shopify/checkout-sheet-kit', () => ({
   useShopifyCheckoutSheet: () => mockCheckout,
 }));
 jest.mock('./cart', () => ({ useCart: jest.fn() }));
+jest.mock('./auth', () => ({
+  useAuth: () => ({ isAuthenticated: false, getAccessToken: jest.fn(async () => null) }),
+}));
 jest.mock('@/lib/analytics', () => ({ track: jest.fn() }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
 
@@ -28,8 +31,10 @@ const cart: Cart = {
   id: 'cart-1',
   checkoutUrl: 'https://shop.example/checkouts/1',
   totalQuantity: 1,
-  buyerIdentity: { email: null },
-  cost: { subtotalAmount: money, totalAmount: money, totalTaxAmount: null },
+  buyerIdentity: { email: null, countryCode: 'US' },
+  discountCodes: [],
+  discountAllocations: [],
+  cost: { subtotalAmount: money, totalAmount: money },
   lines: { nodes: [] },
 };
 

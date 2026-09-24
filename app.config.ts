@@ -82,6 +82,12 @@ const sentryPlugin: NonNullable<ExpoConfig['plugins']> = sentryDsn
     ]
   : [];
 
+/**
+ * Apple Pay wallet button in accelerated checkout — only when a merchant id
+ * is set (see docs/accelerated-checkout.md). Requires a new native build.
+ */
+const applePayMerchantId = pick(env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID, '');
+
 export default (): ExpoConfig => ({
   name: APP_NAME,
   slug: APP_SLUG,
@@ -101,6 +107,9 @@ export default (): ExpoConfig => ({
     infoPlist: { ITSAppUsesNonExemptEncryption: false },
     ...(linkDomains.length
       ? { associatedDomains: linkDomains.map((d) => `applinks:${d}`) }
+      : {}),
+    ...(applePayMerchantId
+      ? { entitlements: { 'com.apple.developer.in-app-payments': [applePayMerchantId] } }
       : {}),
   },
   android: {

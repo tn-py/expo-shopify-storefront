@@ -2,6 +2,7 @@ export { AccountMenuRow } from './account-menu-row';
 export { AppButton } from './app-button';
 export { AppSearchField } from './app-search-field';
 export { AppSurface } from './app-surface';
+export { AppTextField } from './app-text-field';
 export { AppText } from './app-text';
 export { AppToast } from './app-toast';
 export { CatalogGrid } from './catalog-grid';
