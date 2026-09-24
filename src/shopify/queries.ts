@@ -87,7 +87,8 @@ const CART = `
 const CART_WARNINGS = `warnings { code message target }`;
 
 export const SHOP_QUERY = `
-  query Shop {
+  query Shop($country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     shop {
       name
       description
@@ -105,7 +106,8 @@ export const SHOP_QUERY = `
 `;
 
 export const COLLECTIONS_QUERY = `
-  query Collections($first: Int = 30) {
+  query Collections($first: Int = 30, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     collections(first: $first, sortKey: TITLE) {
       nodes {
         id
@@ -127,7 +129,9 @@ export const COLLECTION_QUERY = `
     $sortKey: ProductCollectionSortKeys = COLLECTION_DEFAULT
     $reverse: Boolean = false
     $filters: [ProductFilter!]
-  ) {
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     collection(handle: $handle) {
       id
       handle
@@ -152,7 +156,8 @@ export const COLLECTION_QUERY = `
 `;
 
 export const PRODUCTS_QUERY = `
-  query Products($first: Int = 24) {
+  query Products($first: Int = 24, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     products(first: $first, sortKey: BEST_SELLING) {
       nodes { ...ProductCard }
     }
@@ -163,7 +168,8 @@ export const PRODUCTS_QUERY = `
 `;
 
 export const PRODUCT_QUERY = `
-  query Product($handle: String!) {
+  query Product($handle: String!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     product(handle: $handle) {
       ...ProductCard
       description
@@ -192,7 +198,13 @@ export const PRODUCT_QUERY = `
 `;
 
 export const PRODUCT_VARIANTS_QUERY = `
-  query ProductVariants($handle: String!, $first: Int = 100, $after: String) {
+  query ProductVariants(
+    $handle: String!
+    $first: Int = 100
+    $after: String
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     product(handle: $handle) {
       variants(first: $first, after: $after) {
         nodes {
@@ -214,7 +226,8 @@ export const PRODUCT_VARIANTS_QUERY = `
 `;
 
 export const PREDICTIVE_SEARCH_QUERY = `
-  query PredictiveSearch($query: String!) {
+  query PredictiveSearch($query: String!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     predictiveSearch(query: $query, limit: 10, types: [PRODUCT, COLLECTION, QUERY]) {
       queries { text styledText }
       collections { id handle title image { ...Image } }
@@ -227,10 +240,41 @@ export const PREDICTIVE_SEARCH_QUERY = `
 `;
 
 export const SEARCH_PRODUCTS_QUERY = `
-  query SearchProducts($query: String!, $first: Int = 20, $after: String) {
+  query SearchProducts(
+    $query: String!
+    $first: Int = 20
+    $after: String
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     search(query: $query, first: $first, after: $after, types: [PRODUCT]) {
       nodes { ...ProductCard }
       pageInfo { hasNextPage endCursor }
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
+  ${PRODUCT_CARD}
+`;
+
+export const PRODUCT_RECOMMENDATIONS_QUERY = `
+  query ProductRecommendations($productId: ID!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
+    productRecommendations(productId: $productId, intent: RELATED) {
+      ...ProductCard
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
+  ${PRODUCT_CARD}
+`;
+
+/** Refreshes saved-for-later product cards from Shopify's current catalog. */
+export const WISHLIST_PRODUCTS_QUERY = `
+  query WishlistProducts($ids: [ID!]!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
+    nodes(ids: $ids) {
+      ... on Product { ...ProductCard }
     }
   }
   ${MONEY}

@@ -1,4 +1,5 @@
 import { resolveVariantSelection } from '@/components/commerce/variant-selection';
+import { inContextVariables } from '@/shopify/locale';
 import {
   loadProductWithAllVariants,
   type StorefrontRequester,
@@ -67,6 +68,7 @@ describe('complete product variant loading', () => {
       handle: 'shirt',
       first: 100,
       after: 'cursor-100',
+      ...inContextVariables(),
     });
     expect(resolveVariantSelection(loaded.product!, { Color: 'Purple' }).variant).toEqual(
       laterVariant,

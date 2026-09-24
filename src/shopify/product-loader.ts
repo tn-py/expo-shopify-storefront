@@ -1,4 +1,5 @@
 import { storefront } from './client';
+import { inContextVariables } from './locale';
 import { PRODUCT_QUERY, PRODUCT_VARIANTS_QUERY } from './queries';
 import type { Connection, Product, ProductVariant } from './types';
 
@@ -26,7 +27,10 @@ export async function loadProductWithAllVariants(
   handle: string,
   request: StorefrontRequester = storefront,
 ): Promise<ProductResult> {
-  const result = await request<ProductResult>(PRODUCT_QUERY, { handle });
+  const result = await request<ProductResult>(PRODUCT_QUERY, {
+    handle,
+    ...inContextVariables(),
+  });
   if (!result.product) return result;
 
   const variants = [...result.product.variants.nodes];
@@ -45,6 +49,7 @@ export async function loadProductWithAllVariants(
       handle,
       first: VARIANT_PAGE_SIZE,
       after: cursor,
+      ...inContextVariables(),
     });
     const connection = page.product?.variants;
     if (!connection) {

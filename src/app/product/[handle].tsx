@@ -1,16 +1,28 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getProductScrollBottomPadding,
   multiplyMoneyAmount,
+  ProductHeaderActions,
   ProductOptionSelector,
+  ProductRecommendationsRail,
+  ProductSkeleton,
   resolveVariantSelection,
   ServiceDisclosure,
+  WalletCheckoutButtons,
 } from '@/components/commerce';
-import { ErrorState, LoadingState } from '@/components/screen-state';
+import { ErrorState } from '@/components/screen-state';
 import {
   AppButton,
   AppSurface,
@@ -24,10 +36,11 @@ import {
 } from '@/components/ui';
 import { storefrontUIConfig } from '@/config/storefront-ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { hapticSelection, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { track } from '@/lib/analytics';
 import { useCart } from '@/shopify/cart';
-import { useProduct } from '@/shopify/hooks';
-import type { ShopImage } from '@/shopify/types';
+import { useProduct, useShop } from '@/shopify/hooks';
+import type { ProductCard as ProductCardData, ShopImage } from '@/shopify/types';
 
 type AddFeedback =
   | { mode: 'idle' }
@@ -37,13 +50,18 @@ type AddFeedback =
 export default function ProductScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width } = useWindowDimensions();
+  const queryClient = useQueryClient();
   const { data: product, isPending, isError, error, refetch } = useProduct(handle ?? '');
-  const { addLine, busy } = useCart();
+  const shop = useShop();
+  const { addLine, operations } = useCart();
+  const addPending = operations.add?.pending ?? false;
   const [requestedSelection, setRequestedSelection] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
   const [stickyActionHeight, setStickyActionHeight] = useState(0);
   const [feedback, setFeedback] = useState<AddFeedback>({ mode: 'idle' });
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   const resolved = useMemo(
     () =>
@@ -67,7 +85,17 @@ export default function ProductScreen() {
     if (productHandle) track('product_viewed', { handle: productHandle, title: productTitle });
   }, [productHandle, productTitle]);
 
-  if (isPending) return <LoadingState label="Loading product…" />;
+  if (isPending) {
+    const snapshot = handle
+      ? (queryClient.getQueryData<ProductCardData>(['productCard', handle]) ?? null)
+      : null;
+    return (
+      <AppSurface style={styles.container}>
+        <Stack.Screen options={{ title: '' }} />
+        <ProductSkeleton snapshot={snapshot} />
+      </AppSurface>
+    );
+  }
   if (isError) return <ErrorState message={(error as Error).message} onRetry={refetch} />;
   if (!product) {
     return (
@@ -92,6 +120,9 @@ export default function ProductScreen() {
     ? Math.round((savings / Number(compareAt.amount)) * 100)
     : 0;
   const galleryWidth = Math.min(width >= 700 ? width * 0.58 : width, 620);
+  const shareUrl = shop.data?.primaryDomain?.url
+    ? `${shop.data.primaryDomain.url}/products/${product.handle}`
+    : product.title;
 
   const changeOption = (optionName: string, value: string) => {
     const next = resolveVariantSelection(product, {
@@ -100,6 +131,13 @@ export default function ProductScreen() {
     });
     setRequestedSelection(next.selection);
     setFeedback({ mode: 'idle' });
+    hapticSelection();
+  };
+
+  const onGalleryScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (gallery.length < 2) return;
+    const index = Math.round(event.nativeEvent.contentOffset.x / Math.max(galleryWidth, 1));
+    setGalleryIndex(Math.min(Math.max(index, 0), gallery.length - 1));
   };
 
   const addToCart = async () => {
@@ -112,11 +150,13 @@ export default function ProductScreen() {
         title: product.title,
         quantity,
       });
+      hapticSuccess();
       setFeedback({
         mode: 'success',
         message: `${quantity} ${quantity === 1 ? 'item' : 'items'} added to your cart.`,
       });
     } catch {
+      hapticWarning();
       setFeedback({
         mode: 'error',
         message: 'We couldn’t add this item. Your selection is still here—please try again.',
@@ -126,7 +166,12 @@ export default function ProductScreen() {
 
   return (
     <AppSurface style={styles.container}>
-      <Stack.Screen options={{ title: '' }} />
+      <Stack.Screen
+        options={{
+          title: '',
+          headerRight: () => <ProductHeaderActions product={product} shareUrl={shareUrl} />,
+        }}
+      />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[
@@ -137,6 +182,7 @@ export default function ProductScreen() {
           horizontal
           pagingEnabled={width < 700}
           showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onGalleryScrollEnd}
           contentContainerStyle={styles.gallery}
           accessibilityLabel={`Product gallery, ${Math.max(gallery.length, 1)} images`}>
           {gallery.length ? gallery.map((image, index) => (
@@ -150,9 +196,6 @@ export default function ProductScreen() {
                 contentFit="contain"
                 style={styles.galleryImage}
               />
-              <AppText variant="caption" tone="textSecondary" style={styles.imageCount}>
-                {index + 1} / {gallery.length}
-              </AppText>
             </AppSurface>
           )) : (
             <AppSurface variant="muted" style={[styles.galleryItem, { width: galleryWidth }]}>
@@ -160,6 +203,19 @@ export default function ProductScreen() {
             </AppSurface>
           )}
         </ScrollView>
+        {gallery.length > 1 ? (
+          <View
+            accessible
+            accessibilityLabel={`Image ${galleryIndex + 1} of ${gallery.length}`}
+            style={styles.galleryIndicator}>
+            {gallery.map((image, index) => (
+              <View
+                key={image.url}
+                style={[styles.dot, index === galleryIndex && styles.dotActive]}
+              />
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.body}>
           <View style={styles.identity}>
@@ -211,6 +267,9 @@ export default function ProductScreen() {
               {feedback.mode === 'error' ? (
                 <AppButton label="Try adding again" variant="secondary" onPress={addToCart} />
               ) : null}
+              {feedback.mode === 'success' ? (
+                <AppButton label="View cart" variant="secondary" onPress={() => router.push('/cart')} />
+              ) : null}
             </AppSurface>
           ) : null}
 
@@ -227,6 +286,8 @@ export default function ProductScreen() {
             ))}
           </View>
         </View>
+
+        <ProductRecommendationsRail productId={product.id} excludeHandle={product.handle} />
       </ScrollView>
 
       <StickyActionBar
@@ -246,12 +307,17 @@ export default function ProductScreen() {
           <View style={styles.stickyButton}>
             <AppButton
               label={soldOut ? 'Sold out' : 'Add to cart'}
-              loading={busy}
+              loading={addPending}
               disabled={soldOut || !variant}
               onPress={addToCart}
             />
           </View>
         </View>
+        {variant && !soldOut ? (
+          <View style={styles.walletButtons}>
+            <WalletCheckoutButtons variantId={variant.id} quantity={quantity} />
+          </View>
+        ) : null}
       </StickyActionBar>
     </AppSurface>
   );
@@ -263,7 +329,15 @@ const styles = StyleSheet.create({
   gallery: { gap: Spacing.two, paddingHorizontal: Spacing.two },
   galleryItem: { aspectRatio: 1, overflow: 'hidden' },
   galleryImage: { flex: 1 },
-  imageCount: { position: 'absolute', right: Spacing.two, bottom: Spacing.two },
+  galleryIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingTop: Spacing.two,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(120,120,128,0.36)' },
+  dotActive: { backgroundColor: 'rgba(120,120,128,0.9)', width: 8, height: 8, borderRadius: 4 },
   body: { gap: Spacing.four, padding: Spacing.three },
   identity: { gap: Spacing.one },
   priceAndStock: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two },
@@ -271,6 +345,7 @@ const styles = StyleSheet.create({
   feedback: { gap: Spacing.two, padding: Spacing.three },
   description: { gap: Spacing.two },
   services: { gap: Spacing.two },
+  walletButtons: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', marginTop: Spacing.two },
   stickyContent: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   stickyPrice: { flex: 1 },
   stickyButton: { flex: 1.4 },

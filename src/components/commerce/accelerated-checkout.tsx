@@ -38,12 +38,15 @@ export function WalletCheckoutButtons(props: WalletCheckoutButtonsProps) {
   const [renderable, setRenderable] = useState(true);
   const enabled = Platform.OS === 'ios' && ShopifyEnv.acceleratedCheckoutEnabled;
 
+  // A product-page "buy now" purchase creates its own single-item cart on
+  // Shopify's side, so the shopper's existing cart must survive it.
+  const purchasedCart = 'cartId' in props;
   const onComplete = useCallback((event: CheckoutCompletedEvent) => {
     handleCheckoutCompletion(event, {
-      clearLocal,
+      clearLocal: purchasedCart ? clearLocal : async () => {},
       navigateToConfirmation: (params) => navigateToConfirmation(router, params),
     });
-  }, [clearLocal, router]);
+  }, [clearLocal, purchasedCart, router]);
 
   const onFail = useCallback((error: CheckoutException) => {
     track('checkout_error', { reason: 'accelerated_checkout' });

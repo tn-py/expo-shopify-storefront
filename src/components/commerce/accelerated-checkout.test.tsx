@@ -100,6 +100,20 @@ describe('WalletCheckoutButtons', () => {
     );
   });
 
+  it('keeps the shopper cart when a product-page buy-now purchase completes', async () => {
+    await render(<WalletCheckoutButtons variantId="gid://shopify/ProductVariant/1" quantity={1} />);
+    const { onComplete } = mockAcceleratedCheckoutButtons.mock.calls[0][0] as {
+      onComplete: (event: unknown) => void;
+    };
+
+    onComplete({ orderDetails: { id: 'gid://shopify/Order/2', cart: { price: { total: null } } } });
+
+    const deps = mockHandleCheckoutCompletion.mock.calls[0][1] as { clearLocal: () => Promise<void> };
+    expect(deps.clearLocal).not.toBe(mockClearLocal);
+    await deps.clearLocal();
+    expect(mockClearLocal).not.toHaveBeenCalled();
+  });
+
   it('stops rendering once the native buttons report they cannot render', async () => {
     await render(<WalletCheckoutButtons cartId="gid://shopify/Cart/1" />);
     const { onRenderStateChange } = mockAcceleratedCheckoutButtons.mock.calls[0][0] as {
