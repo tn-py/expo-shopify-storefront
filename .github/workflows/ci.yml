@@ -4,8 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
+  # Typecheck, lint, tests, env-validation script, expo-doctor, and a guard
+  # against test files leaking into the Expo Router route tree.
   checks:
     runs-on: ubuntu-latest
     steps:
@@ -13,13 +23,28 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
-      - name: Create a placeholder env
+      - name: Create a placeholder env (demo mode)
         run: cp .env.example .env
+
+      # Expo Router treats every file under src/app/ as a route (or, for a
+      # *.test.* file, an unroutable module Metro still has to resolve while
+      # bundling the route tree). Tests belong next to the code they cover
+      # under src/, not under src/app/ — this fails fast if one slips in.
+      - name: Guard against test files under src/app/
+        run: |
+          matches="$(find src/app -type f -name '*.test.*' 2>/dev/null)"
+          if [ -n "$matches" ]; then
+            echo "::error::Expo Router bundles every file under src/app/ as a route. Move these next to the code they test, under src/:"
+            echo "$matches"
+            exit 1
+          fi
+          echo "No test files under src/app/."
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -28,7 +53,76 @@ jobs:
         run: npx expo lint
 
       - name: Jest
-        run: npm test -- --runInBand
+        run: npm test -- --runInBand --ci
 
+      # scripts/check-env.mjs correctly reports the committed .env.example as
+      # invalid (blank Storefront token), so running it against that file
+      # can't tell us the script itself still works. Instead, feed it a
+      # throwaway .env of obviously-fake-but-well-formed values (--offline
+      # skips the live Storefront API ping) to exercise every validation
+      # rule end to end, then restore the placeholder .env for the steps
+      # below. check-env.mjs always reads the literal `.env` file (not
+      # `NODE_OPTIONS`/`--env-file`), so the synthetic values have to land
+      # there rather than in a differently-named file.
+      - name: Validate check:env against a synthetic env (offline)
+        run: |
+          cp .env .env.ci-placeholder-backup
+          cat > .env <<'EOF'
+          EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN=ci-synthetic-shop.myshopify.com
+          EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN=ci-synthetic-token-0123456789abcdef
+          EXPO_PUBLIC_SHOPIFY_API_VERSION=2026-07
+          EXPO_PUBLIC_APP_BUNDLE_ID=com.ci.synthetic
+          EXPO_PUBLIC_APP_SCHEME=cisynthetic
+          EXPO_PUBLIC_BRAND_PRIMARY=#112233
+          EXPO_PUBLIC_BRAND_ON_PRIMARY=#ffffff
+          EXPO_PUBLIC_BRAND_SALE=#aa2233
+          EXPO_PUBLIC_APP_BACKGROUND=#ffffff
+          EXPO_PUBLIC_APP_COLOR_SCHEME=system
+          EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL=https://shopify.com/authentication/1234567890
+          EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID=ci-synthetic-client-id
+          EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_MANAGE_URL=https://ci-synthetic-shop.myshopify.com/account
+          EXPO_PUBLIC_ABOUT_URL=https://example.com/about
+          EXPO_PUBLIC_SUPPORT_EMAIL=support@example.com
+          EXPO_PUBLIC_APP_UNIVERSAL_LINK_DOMAINS=shop.example.com
+          EXPO_PUBLIC_ONESIGNAL_IOS_MODE=development
+          EXPO_PUBLIC_SENTRY_DSN=https://examplekey@o0.ingest.sentry.io/0
+          EOF
+          node scripts/check-env.mjs --offline
+          mv .env.ci-placeholder-backup .env
+
+      # Blocking: this template targets a moving SDK, and expo-doctor catches
+      # native-dependency / config-plugin drift (unmatched versions, missing
+      # plugins) that typecheck/lint/jest can't see. Keep it blocking rather
+      # than continue-on-error so that drift is caught in CI, not by a
+      # merchant's first native build.
       - name: Doctor
         run: npx expo-doctor
+
+  # Bundles the JS for each platform against the placeholder .env (demo
+  # mode), which catches Metro resolution errors and route-bundle issues
+  # (e.g. a stray test file under src/app/) that typecheck/lint/jest don't
+  # exercise. Runs in parallel with `checks` rather than after it: it's an
+  # independent, cheap signal (~1-2 min) and most PRs pass both, so gating it
+  # on `checks` would only slow down the common case for no benefit.
+  export:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, android]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Create a placeholder env (demo mode)
+        run: cp .env.example .env
+
+      - name: Export ${{ matrix.platform }} bundle
+        run: npx expo export --platform ${{ matrix.platform }} --output-dir dist-${{ matrix.platform }}
