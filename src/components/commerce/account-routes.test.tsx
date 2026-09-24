@@ -42,6 +42,9 @@ jest.mock('@/shopify/env', () => ({
   isCustomerAccountConfigured: true,
   ShopifyEnv: {
     get customerAccountManagementUrl() { return mockManagementUrl; },
+    country: '',
+    language: '',
+    localize: 'device',
   },
 }));
 jest.mock('@/shopify/hooks', () => ({

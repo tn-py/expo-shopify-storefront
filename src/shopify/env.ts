@@ -37,6 +37,13 @@ export const ShopifyEnv = {
    * client: `shop.<shop-id>.*` (registered in app.config.ts + Shopify admin).
    */
   customerAccountScheme: shopId ? `shop.${shopId}.app` : '',
+  /**
+   * Markets / @inContext overrides — raw values, validated and defaulted by
+   * `src/shopify/locale.ts`. `localize` is `device` (default) | `off`.
+   */
+  country: process.env.EXPO_PUBLIC_SHOPIFY_COUNTRY?.trim() ?? '',
+  language: process.env.EXPO_PUBLIC_SHOPIFY_LANGUAGE?.trim() ?? '',
+  localize: process.env.EXPO_PUBLIC_SHOPIFY_LOCALIZE?.trim() ?? 'device',
 } as const;
 
 export const isStorefrontConfigured =

@@ -3,8 +3,9 @@
  * (`light` | `dark` | `system`, default `system`).
  */
 
+import { useColorScheme } from 'react-native';
+
 import { AppColorScheme, Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function useResolvedScheme(): 'light' | 'dark' {
   const system = useColorScheme();

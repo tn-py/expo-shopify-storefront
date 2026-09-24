@@ -19,7 +19,6 @@ const APP_NAME = pick(env.EXPO_PUBLIC_APP_NAME, 'Shopify Storefront');
 const APP_SLUG = pick(env.EXPO_PUBLIC_APP_SLUG, 'expo-shopify-storefront');
 const APP_SCHEME = pick(env.EXPO_PUBLIC_APP_SCHEME, 'shopstore');
 const BUNDLE_ID = pick(env.EXPO_PUBLIC_APP_BUNDLE_ID, 'com.example.storefront');
-const BRAND_PRIMARY = pick(env.EXPO_PUBLIC_BRAND_PRIMARY, '#0a7ea4');
 const APP_BACKGROUND = pick(env.EXPO_PUBLIC_APP_BACKGROUND, '#ffffff');
 const COLOR_SCHEME = pick(env.EXPO_PUBLIC_APP_COLOR_SCHEME, 'system');
 
@@ -63,6 +62,26 @@ const onesignalPlugin: NonNullable<ExpoConfig['plugins']> = onesignalAppId
   ? [['onesignal-expo-plugin', { mode: onesignalMode }]]
   : [];
 
+/**
+ * Crash reporting via Sentry — only wired into the native build when
+ * `EXPO_PUBLIC_SENTRY_DSN` is set (see `src/lib/monitoring.ts`). `SENTRY_ORG` /
+ * `SENTRY_PROJECT` are optional and only needed for source-map upload.
+ */
+const sentryDsn = pick(env.EXPO_PUBLIC_SENTRY_DSN, '');
+const sentryOrg = pick(env.SENTRY_ORG, '');
+const sentryProject = pick(env.SENTRY_PROJECT, '');
+const sentryPlugin: NonNullable<ExpoConfig['plugins']> = sentryDsn
+  ? [
+      [
+        '@sentry/react-native/expo',
+        {
+          ...(sentryOrg ? { organization: sentryOrg } : {}),
+          ...(sentryProject ? { project: sentryProject } : {}),
+        },
+      ],
+    ]
+  : [];
+
 export default (): ExpoConfig => ({
   name: APP_NAME,
   slug: APP_SLUG,
@@ -76,6 +95,10 @@ export default (): ExpoConfig => ({
   ios: {
     bundleIdentifier: BUNDLE_ID,
     supportsTablet: true,
+    // The app only ever talks HTTPS (Storefront/Customer Account APIs, Checkout
+    // Sheet Kit) — no proprietary encryption, so skip the export-compliance
+    // prompt on every App Store Connect upload.
+    infoPlist: { ITSAppUsesNonExemptEncryption: false },
     ...(linkDomains.length
       ? { associatedDomains: linkDomains.map((d) => `applinks:${d}`) }
       : {}),
@@ -100,7 +123,6 @@ export default (): ExpoConfig => ({
           ],
         }
       : {}),
-    permissions: ['com.google.android.gms.permission.AD_ID'],
   },
   plugins: [
     'expo-router',
@@ -113,15 +135,21 @@ export default (): ExpoConfig => ({
       },
     ],
     'expo-secure-store',
-    'expo-tracking-transparency',
     'expo-localization',
-    ['expo-notifications', { color: BRAND_PRIMARY }],
     ...onesignalPlugin,
+    ...sentryPlugin,
   ],
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
   },
+  // OTA updates identify compatible builds by native fingerprint rather than a
+  // manually bumped `runtimeVersion` string. `updates.url` (and therefore the
+  // whole OTA channel wiring) only applies once the project is linked to EAS.
+  runtimeVersion: { policy: 'fingerprint' },
+  ...(env.EAS_PROJECT_ID?.trim()
+    ? { updates: { url: `https://u.expo.dev/${env.EAS_PROJECT_ID.trim()}` } }
+    : {}),
   extra: {
     router: {},
     ...(env.EAS_PROJECT_ID?.trim()
