@@ -15,7 +15,7 @@ Everything merchant-specific — name, colours, bundle id, deep-link domains, st
 credentials — is configuration, not code. Try it against Shopify's public demo
 catalog with zero setup, then point it at your own store when you're ready.
 
-## Try it in 2 minutes
+## Try it with demo data
 
 No Shopify store needed yet — with no credentials configured, the app runs
 against [mock.shop](https://mock.shop), Shopify's public sample catalog (see
@@ -37,6 +37,9 @@ eas build --profile development --platform android   # one-time dev client (side
 npm start                                             # expo start --dev-client
 ```
 
+> Have Android Studio or Xcode installed? `npx expo run:android` /
+> `npx expo run:ios` builds the dev client locally instead of on EAS.
+
 > Requires **Node 22 LTS** and an [Expo / EAS account](https://expo.dev). The
 > Checkout Sheet Kit is a native module, so **Expo Go won't work** — you need a
 > dev client, even to try demo mode. Swap `android` for `ios` /
@@ -44,8 +47,9 @@ npm start                                             # expo start --dev-client
 > [Building & releasing](#building--releasing)).
 
 Open the dev client on the device/simulator and connect to Metro. You now have a
-working storefront with sample products, collections, cart, and checkout — a
-small dismissible banner reminds you it's a demo.
+working storefront with sample products, collections, search, and cart — a
+small dismissible banner reminds you it's a demo. Checkout and customer accounts
+need a real store (see [demo-mode.md](docs/demo-mode.md)).
 
 ### Connect your store
 
@@ -162,7 +166,7 @@ once `EAS_PROJECT_ID` is set (`eas init`). See
 ### Demo mode
 
 With no store configured, the app runs against `mock.shop` instead of showing
-a setup wall — the whole point of [Try it in 2 minutes](#try-it-in-2-minutes).
+a setup wall — the whole point of [Try it with demo data](#try-it-with-demo-data).
 See [demo-mode.md](docs/demo-mode.md).
 
 ### DX

@@ -163,6 +163,12 @@ async function main() {
     connectivityFailed = !result.ok;
   }
 
+  if (!token && (env.EXPO_PUBLIC_DEMO_MODE ?? '').trim().toLowerCase() !== 'off') {
+    console.log(
+      '\nNo Storefront token yet, so the app runs in demo mode (mock.shop). Fill in the errors above to connect your store.',
+    );
+  }
+
   if (hasErrors || connectivityFailed) {
     console.log(colorize('error', '\nFailed — fix the errors above.'));
     process.exitCode = 1;
