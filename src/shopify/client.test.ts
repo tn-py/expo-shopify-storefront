@@ -232,7 +232,7 @@ describe('demo transport error normalization', () => {
       json: async () => ({ errors: [{ message: 'Field x missing' }, { message: 'Bad y' }] }),
     });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-    const { storefront, StorefrontError } = require('./client');
+    const { storefront, StorefrontError } = loadClient();
     await expect(storefront('query { shop { name } }')).rejects.toEqual(
       expect.objectContaining({ message: 'Field x missing; Bad y' }),
     );
