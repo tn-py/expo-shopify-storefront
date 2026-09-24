@@ -220,3 +220,22 @@ describe('storefront() — demo mode (mock.shop)', () => {
     await expect(storefront('query Shop { shop { name } }')).rejects.toThrow(StorefrontError);
   });
 });
+
+describe('demo transport error normalization', () => {
+  it('joins GraphQL error arrays into a StorefrontError message', async () => {
+    jest.resetModules();
+    process.env.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN = '';
+    process.env.EXPO_PUBLIC_SHOPIFY_STOREFRONT_TOKEN = '';
+    process.env.EXPO_PUBLIC_DEMO_MODE = '';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ errors: [{ message: 'Field x missing' }, { message: 'Bad y' }] }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { storefront, StorefrontError } = require('./client');
+    await expect(storefront('query { shop { name } }')).rejects.toEqual(
+      expect.objectContaining({ message: 'Field x missing; Bad y' }),
+    );
+    await expect(storefront('query { shop { name } }')).rejects.toBeInstanceOf(StorefrontError);
+  });
+});

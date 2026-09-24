@@ -75,7 +75,7 @@ function stripLocaleVariables(
 
 interface GraphQlEnvelope<TData> {
   data?: TData;
-  errors?: { message: string } & Record<string, unknown>;
+  errors?: { message: string };
 }
 
 async function requestFromMockShop<TData>(
@@ -102,7 +102,16 @@ async function requestFromMockShop<TData>(
     });
   }
 
-  return (await response.json()) as GraphQlEnvelope<TData>;
+  // Raw GraphQL responses carry `errors` as an array; normalize to the
+  // `{ message }` shape `@shopify/storefront-api-client` returns.
+  const json = (await response.json()) as {
+    data?: TData;
+    errors?: { message?: string }[];
+  };
+  const errors = json.errors?.length
+    ? { message: json.errors.map((error) => error.message).filter(Boolean).join('; ') }
+    : undefined;
+  return { data: json.data, errors };
 }
 
 /**
