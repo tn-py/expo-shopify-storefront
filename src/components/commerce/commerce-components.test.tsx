@@ -1,4 +1,5 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render as baseRender } from '@testing-library/react-native';
 
 import { CollectionCard } from '@/components/commerce/collection-card';
 import { ProductCard } from '@/components/commerce/product-card';
@@ -10,6 +11,23 @@ import type { CollectionCard as CollectionCardData, Product } from '@/shopify/ty
 jest.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
+jest.mock('@/wishlist/wishlist', () => ({ useWishlist: jest.fn() }));
+// `ProductCard` only needs the query-key shape here; the real module reaches
+// into `@/shopify/client`, which throws without a configured store domain.
+jest.mock('@/shopify/hooks', () => ({
+  productQueryOptions: (handle: string) => ({
+    queryKey: ['product', handle],
+    queryFn: async () => ({ product: null }),
+  }),
+}));
+
+const wishlist = jest.requireMock('@/wishlist/wishlist') as { useWishlist: jest.Mock };
+
+/** `ProductCard` prefetches on press-in via `useQueryClient()`, so every render here needs a client. */
+function render(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return baseRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const image = { url: 'https://example.com/item.jpg', altText: 'Item', width: 800, height: 800 };
 const money = { amount: '20.00', currencyCode: 'USD' };
@@ -73,6 +91,17 @@ const product: Product = {
   tags: [],
 };
 
+beforeEach(() => {
+  jest.clearAllMocks();
+  wishlist.useWishlist.mockReturnValue({
+    isSaved: () => false,
+    toggle: jest.fn(),
+    remove: jest.fn(),
+    items: [],
+    ready: true,
+  });
+});
+
 describe('shared commerce components', () => {
   it('exposes product cards as descriptive touch-safe links', async () => {
     const { getByRole, getByText } = await render(<ProductCard product={product} />);
@@ -81,6 +110,41 @@ describe('shared commerce components', () => {
       minHeight: 44,
     });
     expect(getByText('Sale')).toBeOnTheScreen();
+  });
+
+  it('overlays an accessible, sibling wishlist toggle that does not swallow the card link', async () => {
+    const toggle = jest.fn();
+    wishlist.useWishlist.mockReturnValue({
+      isSaved: () => false,
+      toggle,
+      remove: jest.fn(),
+      items: [],
+      ready: true,
+    });
+    const { getByRole } = await render(<ProductCard product={product} />);
+
+    expect(getByRole('link', { name: 'Everyday shirt, $20.00, on sale' })).toBeOnTheScreen();
+    const heart = getByRole('button', { name: 'Save Everyday shirt' });
+    expect(heart).toHaveProp('accessibilityState', { selected: false });
+    await fireEvent.press(heart);
+    expect(toggle).toHaveBeenCalledWith(product);
+  });
+
+  it('prefetches the product and seeds a card snapshot on press-in for an instant PDP', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const prefetchSpy = jest.spyOn(client, 'prefetchQuery').mockResolvedValue(undefined);
+    const { getByRole } = await baseRender(
+      <QueryClientProvider client={client}>
+        <ProductCard product={product} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent(getByRole('link', { name: 'Everyday shirt, $20.00, on sale' }), 'pressIn');
+
+    expect(client.getQueryData(['productCard', 'shirt'])).toEqual(product);
+    expect(prefetchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ['product', 'shirt'] }),
+    );
   });
 
   it('supports long collection descriptions without changing the link contract', async () => {
