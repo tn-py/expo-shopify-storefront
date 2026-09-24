@@ -1,15 +1,18 @@
+import { deviceLocaleTag } from '@/shopify/locale';
 import type { Money } from '@/shopify/types';
 
 const formatters = new Map<string, Intl.NumberFormat>();
 
 function formatterFor(currencyCode: string): Intl.NumberFormat {
-  let f = formatters.get(currencyCode);
+  const locale = deviceLocaleTag();
+  const key = `${locale}:${currencyCode}`;
+  let f = formatters.get(key);
   if (!f) {
-    f = new Intl.NumberFormat('en-US', {
+    f = new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: currencyCode || 'USD',
     });
-    formatters.set(currencyCode, f);
+    formatters.set(key, f);
   }
   return f;
 }

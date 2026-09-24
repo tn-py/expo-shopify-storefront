@@ -22,6 +22,7 @@ import { AppColorScheme, Colors, Fonts } from '@/constants/theme';
 import { useResolvedScheme } from '@/hooks/use-theme';
 import { captureException, initMonitoring, wrapRoot } from '@/lib/monitoring';
 import { queryClient } from '@/lib/query-client';
+import { initQueryLifecycle } from '@/lib/query-lifecycle';
 import { PushProvider } from '@/notifications/onesignal';
 import { AuthProvider } from '@/shopify/auth';
 import { CartProvider } from '@/shopify/cart';
@@ -32,6 +33,7 @@ import '../../global.css';
 
 initializeTheme();
 initMonitoring();
+initQueryLifecycle();
 
 /** Reported to Sentry (when configured) and shown instead of a blank/crashed screen. */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
