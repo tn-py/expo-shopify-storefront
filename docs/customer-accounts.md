@@ -59,7 +59,9 @@ customer's identity. `CartProvider` detects the signed-in → guest transition
 and rebuilds a **new guest cart** with the same lines (reusing the same
 cart-creation path as stale-cart recovery), persists its id, and drops the
 old one — guarded by the same snapshot sequencer as every other cart
-mutation, so a concurrent add/update can't resurrect the old cart.
+mutation, so a concurrent add/update can't resurrect the old cart. If the
+guest cart can't be created (e.g. the device is offline), the local cart is
+cleared instead: privacy wins over keeping the items.
 
 Separately, `AuthProvider.signOut()` (`src/shopify/auth.tsx`) makes a
 **best-effort** call to Shopify's Customer Account API end-session endpoint —

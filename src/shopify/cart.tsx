@@ -518,6 +518,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     snapshotSequencer,
   ]);
 
+  const clearLocal = useCallback(async () => {
+    snapshotSequencer.invalidate();
+    const version = snapshotSequencer.begin();
+    syncedBuyerRef.current = null;
+    setSyncedBuyerKey(null);
+    cartRef.current = null;
+    dispatch({ type: 'reset' });
+    await persistId(version, null);
+  }, [persistId, snapshotSequencer]);
+
   /**
    * Privacy on shared devices: once a signed-in customer's identity has been
    * associated with the remote cart, signing out must not leave that cart
@@ -541,8 +551,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       captureException(error, { scope: 'cart.signOutGuestRebuild' });
+      // Privacy wins over convenience: never leave the signed-in customer's
+      // cart on the device when a guest copy couldn't be created.
+      await clearLocal();
     }
-  }, [applyCartSnapshot, buyerIdentityTarget, createRemoteCartOnly, markBuyerIdentitySynced, persistId, snapshotSequencer]);
+  }, [applyCartSnapshot, buyerIdentityTarget, clearLocal, createRemoteCartOnly, markBuyerIdentitySynced, persistId, snapshotSequencer]);
 
   useEffect(() => {
     if (buyerIdentityTarget.status !== 'ready') return;
@@ -573,16 +586,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const dismissWarnings = useCallback(() => {
     dispatch({ type: 'warningsDismissed' });
   }, []);
-
-  const clearLocal = useCallback(async () => {
-    snapshotSequencer.invalidate();
-    const version = snapshotSequencer.begin();
-    syncedBuyerRef.current = null;
-    setSyncedBuyerKey(null);
-    cartRef.current = null;
-    dispatch({ type: 'reset' });
-    await persistId(version, null);
-  }, [persistId, snapshotSequencer]);
 
   const busy = Object.values(state.operations).some((operation) => operation.pending);
   const buyerIdentityReady =

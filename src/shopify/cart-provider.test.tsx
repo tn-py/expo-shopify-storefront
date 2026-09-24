@@ -215,6 +215,35 @@ describe('CartProvider identity synchronization', () => {
     expect(persistedCartId).toBe('cart-2');
     expect(latestCartContext?.buyerIdentityReady).toBe(true);
   });
+
+  it('drops the signed-in cart from the device when the guest rebuild fails on sign-out', async () => {
+    mockAuthState = {
+      ...mockAuthState,
+      isAuthenticated: true,
+      customer: { id: 'customer-1', firstName: 'M', lastName: null, emailAddress: 'member@example.com' },
+      customerProfileStatus: 'ready',
+      getAccessToken: jest.fn(async () => 'token-1'),
+    };
+    let persistedCartId: string | null = 'cart-1';
+    mockStorage.setItem.mockImplementation(async (_key, value) => { persistedCartId = value; });
+    mockStorage.removeItem.mockImplementation(async () => { persistedCartId = null; });
+    mockStorefront.mockImplementation(async (operation: string) => {
+      if (operation === CART_QUERY) return { cart: makeCart(1, 1, 'member@example.com') };
+      if (operation === CART_BUYER_IDENTITY_UPDATE) {
+        return { cartBuyerIdentityUpdate: { cart: makeCart(1, 1, 'member@example.com'), userErrors: [], warnings: [] } };
+      }
+      if (operation === CART_CREATE) throw new Error('offline');
+      throw new Error('unexpected operation');
+    });
+    const view = await render(<CartProvider><Probe /></CartProvider>);
+    await waitFor(() => expect(latestCartContext?.buyerIdentityReady).toBe(true));
+
+    mockAuthState = { ...mockAuthState, isAuthenticated: false, customer: null, customerProfileStatus: 'idle' };
+    await view.rerender(<CartProvider><Probe /></CartProvider>);
+
+    await waitFor(() => expect(latestCartContext?.cart).toBeNull());
+    expect(persistedCartId).toBeNull();
+  });
 });
 
 describe('CartProvider discount codes', () => {
