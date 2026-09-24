@@ -1,0 +1,63 @@
+# EAS Workflow — example, not wired up automatically.
+#
+# EAS Workflows run on Expo's infrastructure, triggered by the EAS GitHub
+# app (not GitHub Actions). To use this:
+#   1. `eas init` (links this repo to an EAS project; sets EAS_PROJECT_ID).
+#   2. Install the EAS GitHub app on this repo: https://expo.dev/settings/github
+#   3. Push this file — EAS starts triggering workflows in `.eas/workflows/`
+#      on matching events automatically, no other setup needed.
+#   4. Configure EAS Environment Variables for the `production` environment
+#      and secrets (`SENTRY_AUTH_TOKEN`, Apple/Google submit credentials) in
+#      the dashboard before the submit jobs below can succeed.
+#
+# Docs: https://docs.expo.dev/eas/workflows/get-started/
+#
+# What this does: builds iOS + Android with the `production` eas.json
+# profile, either manually or when a `v*` tag is pushed (e.g. `git tag
+# v1.0.0 && git push --tags`). The submit jobs are commented out by
+# default — uncomment them once store credentials are set up (see
+# docs/release-checklist.md) so a tag push doesn't accidentally submit to
+# the stores before you're ready.
+
+name: Production build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+jobs:
+  build_ios:
+    name: Build iOS (production)
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  build_android:
+    name: Build Android (production)
+    type: build
+    params:
+      platform: android
+      profile: production
+
+  # Uncomment once `eas submit` credentials (App Store Connect API key /
+  # Google Play service account) are configured for this project — see
+  # docs/release-checklist.md. Each submit job runs after its matching
+  # build job completes.
+  #
+  # submit_ios:
+  #   name: Submit iOS to App Store Connect
+  #   needs: [build_ios]
+  #   type: submit
+  #   params:
+  #     platform: ios
+  #     build_id: ${{ needs.build_ios.outputs.build_id }}
+  #
+  # submit_android:
+  #   name: Submit Android to Google Play
+  #   needs: [build_android]
+  #   type: submit
+  #   params:
+  #     platform: android
+  #     build_id: ${{ needs.build_android.outputs.build_id }}
