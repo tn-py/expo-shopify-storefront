@@ -2,6 +2,15 @@
 
 Everything the app needs from the Shopify side. Budget ~15 minutes.
 
+> Don't have a store yet, or just want to try the app first? Skip straight to
+> [Getting started](../README.md#getting-started) — with no store configured the app
+> runs in **demo mode** against Shopify's public mock.shop sample catalog. See
+> [demo-mode.md](./demo-mode.md).
+
+After filling in `.env`, run `npm run check:env` — it validates the values below
+(domain format, token present, API version freshness, etc.) and pings the Storefront
+API with your token, reporting a bad token/domain distinctly from a network problem.
+
 ## 1. Storefront API access token (required)
 
 1. Shopify admin → **Settings → Apps and sales channels → Develop apps**.
@@ -43,7 +52,8 @@ For sign-in / order history / addresses. See
 2. Open the **Customer Account API** / Headless application setup, copy the
    **Client ID** and the **auth base URL**
    (`https://shopify.com/authentication/<shop-id>`).
-3. Add the callback URI `shop.<shop-id>.app://callback`.
+3. Add the callback URI `shop.<shop-id>.app://callback` (run `npm run check:env`
+   after filling in the API URL below — it prints this exact URI for you).
 4. Fill `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_CLIENT_ID` and
    `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL` in `.env`.
 5. Optional but recommended: set

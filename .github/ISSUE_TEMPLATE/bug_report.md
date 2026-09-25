@@ -14,10 +14,11 @@ Steps to reproduce, ideally from a clean `.env` copied from `.env.example`.
 What you expected to happen.
 
 **Environment**
+- Demo mode or your own store: demo mode (mock.shop) / my own store
 - Platform: iOS / Android
 - OS version:
 - Expo SDK: 57
-- Device or simulator:
+- Device or simulator (model):
 - `npx expo-doctor` output (if relevant):
 
 **Screenshots / logs**

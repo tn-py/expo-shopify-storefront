@@ -6,9 +6,14 @@
 
 <!-- Device / simulator, platform, steps. Screenshots for anything visual. -->
 
+- [ ] Tested on iOS
+- [ ] Tested on Android
+- [ ] Tested in demo mode (`EXPO_PUBLIC_DEMO_MODE=on`, no store configured)
+
 ## Checklist
 
-- [ ] `npm run typecheck` passes
-- [ ] `npm run lint` passes
+- [ ] `npm run verify` passes (typecheck + lint + tests)
 - [ ] No store-specific values hard-coded (they belong in `.env` / `.env.example`)
-- [ ] Docs / `.env.example` updated if config changed
+- [ ] `.env.example` and `scripts/env-rules.cjs` updated if the env changed
+- [ ] Docs updated if config or behavior changed
+- [ ] Screenshots attached for UI changes

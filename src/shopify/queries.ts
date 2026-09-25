@@ -35,16 +35,29 @@ const PRODUCT_CARD = `
   }
 `;
 
+const CART_DISCOUNT_ALLOCATION = `
+  fragment CartDiscountAllocation on CartDiscountAllocation {
+    discountedAmount { ...Money }
+    ... on CartCodeDiscountAllocation { code }
+    ... on CartAutomaticDiscountAllocation { title }
+  }
+`;
+
+// Taxes aren't selected — they're calculated (and shown) in Shopify Checkout,
+// not the cart. `warnings` surfaces non-blocking issues (e.g. a quantity
+// Shopify capped for stock) and is only meaningful on mutation payloads, so
+// it's spread into each mutation below rather than into this fragment.
 const CART = `
   fragment Cart on Cart {
     id
     checkoutUrl
     totalQuantity
-    buyerIdentity { email }
+    buyerIdentity { email countryCode }
+    discountCodes { code applicable }
+    discountAllocations { ...CartDiscountAllocation }
     cost {
       subtotalAmount { ...Money }
       totalAmount { ...Money }
-      totalTaxAmount { ...Money }
     }
     lines(first: 100) {
       nodes {
@@ -54,6 +67,7 @@ const CART = `
           totalAmount { ...Money }
           amountPerQuantity { ...Money }
         }
+        discountAllocations { ...CartDiscountAllocation }
         merchandise {
           ... on ProductVariant {
             id
@@ -67,10 +81,14 @@ const CART = `
       }
     }
   }
+  ${CART_DISCOUNT_ALLOCATION}
 `;
 
+const CART_WARNINGS = `warnings { code message target }`;
+
 export const SHOP_QUERY = `
-  query Shop {
+  query Shop($country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     shop {
       name
       description
@@ -88,7 +106,8 @@ export const SHOP_QUERY = `
 `;
 
 export const COLLECTIONS_QUERY = `
-  query Collections($first: Int = 30) {
+  query Collections($first: Int = 30, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     collections(first: $first, sortKey: TITLE) {
       nodes {
         id
@@ -110,7 +129,9 @@ export const COLLECTION_QUERY = `
     $sortKey: ProductCollectionSortKeys = COLLECTION_DEFAULT
     $reverse: Boolean = false
     $filters: [ProductFilter!]
-  ) {
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     collection(handle: $handle) {
       id
       handle
@@ -135,7 +156,8 @@ export const COLLECTION_QUERY = `
 `;
 
 export const PRODUCTS_QUERY = `
-  query Products($first: Int = 24) {
+  query Products($first: Int = 24, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     products(first: $first, sortKey: BEST_SELLING) {
       nodes { ...ProductCard }
     }
@@ -146,7 +168,8 @@ export const PRODUCTS_QUERY = `
 `;
 
 export const PRODUCT_QUERY = `
-  query Product($handle: String!) {
+  query Product($handle: String!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     product(handle: $handle) {
       ...ProductCard
       description
@@ -175,7 +198,13 @@ export const PRODUCT_QUERY = `
 `;
 
 export const PRODUCT_VARIANTS_QUERY = `
-  query ProductVariants($handle: String!, $first: Int = 100, $after: String) {
+  query ProductVariants(
+    $handle: String!
+    $first: Int = 100
+    $after: String
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     product(handle: $handle) {
       variants(first: $first, after: $after) {
         nodes {
@@ -197,7 +226,8 @@ export const PRODUCT_VARIANTS_QUERY = `
 `;
 
 export const PREDICTIVE_SEARCH_QUERY = `
-  query PredictiveSearch($query: String!) {
+  query PredictiveSearch($query: String!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     predictiveSearch(query: $query, limit: 10, types: [PRODUCT, COLLECTION, QUERY]) {
       queries { text styledText }
       collections { id handle title image { ...Image } }
@@ -210,7 +240,13 @@ export const PREDICTIVE_SEARCH_QUERY = `
 `;
 
 export const SEARCH_PRODUCTS_QUERY = `
-  query SearchProducts($query: String!, $first: Int = 20, $after: String) {
+  query SearchProducts(
+    $query: String!
+    $first: Int = 20
+    $after: String
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     search(query: $query, first: $first, after: $after, types: [PRODUCT]) {
       nodes { ...ProductCard }
       pageInfo { hasNextPage endCursor }
@@ -221,13 +257,47 @@ export const SEARCH_PRODUCTS_QUERY = `
   ${PRODUCT_CARD}
 `;
 
-/* ---- Cart mutations ---- */
+export const PRODUCT_RECOMMENDATIONS_QUERY = `
+  query ProductRecommendations($productId: ID!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
+    productRecommendations(productId: $productId, intent: RELATED) {
+      ...ProductCard
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
+  ${PRODUCT_CARD}
+`;
+
+/** Refreshes saved-for-later product cards from Shopify's current catalog. */
+export const WISHLIST_PRODUCTS_QUERY = `
+  query WishlistProducts($ids: [ID!]!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
+    nodes(ids: $ids) {
+      ... on Product { ...ProductCard }
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
+  ${PRODUCT_CARD}
+`;
+
+/* ---- Cart mutations ----
+ * Every operation declares `$country`/`$language` and `@inContext` so prices
+ * (and the discount amounts below) match the buyer's market — callers spread
+ * `...inContextVariables()` into the request variables. */
 
 export const CART_CREATE = `
-  mutation CartCreate($lines: [CartLineInput!], $buyerIdentity: CartBuyerIdentityInput) {
+  mutation CartCreate(
+    $lines: [CartLineInput!]
+    $buyerIdentity: CartBuyerIdentityInput
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     cartCreate(input: { lines: $lines, buyerIdentity: $buyerIdentity }) {
       cart { ...Cart }
       userErrors { field message }
+      ${CART_WARNINGS}
     }
   }
   ${MONEY}
@@ -236,7 +306,8 @@ export const CART_CREATE = `
 `;
 
 export const CART_QUERY = `
-  query CartQuery($id: ID!) {
+  query CartQuery($id: ID!, $country: CountryCode, $language: LanguageCode)
+    @inContext(country: $country, language: $language) {
     cart(id: $id) { ...Cart }
   }
   ${MONEY}
@@ -245,10 +316,16 @@ export const CART_QUERY = `
 `;
 
 export const CART_LINES_ADD = `
-  mutation CartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
+  mutation CartLinesAdd(
+    $cartId: ID!
+    $lines: [CartLineInput!]!
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     cartLinesAdd(cartId: $cartId, lines: $lines) {
       cart { ...Cart }
       userErrors { field message }
+      ${CART_WARNINGS}
     }
   }
   ${MONEY}
@@ -257,10 +334,16 @@ export const CART_LINES_ADD = `
 `;
 
 export const CART_LINES_UPDATE = `
-  mutation CartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
+  mutation CartLinesUpdate(
+    $cartId: ID!
+    $lines: [CartLineUpdateInput!]!
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     cartLinesUpdate(cartId: $cartId, lines: $lines) {
       cart { ...Cart }
       userErrors { field message }
+      ${CART_WARNINGS}
     }
   }
   ${MONEY}
@@ -269,10 +352,16 @@ export const CART_LINES_UPDATE = `
 `;
 
 export const CART_LINES_REMOVE = `
-  mutation CartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
+  mutation CartLinesRemove(
+    $cartId: ID!
+    $lineIds: [ID!]!
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
       cart { ...Cart }
       userErrors { field message }
+      ${CART_WARNINGS}
     }
   }
   ${MONEY}
@@ -281,10 +370,34 @@ export const CART_LINES_REMOVE = `
 `;
 
 export const CART_BUYER_IDENTITY_UPDATE = `
-  mutation CartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+  mutation CartBuyerIdentityUpdate(
+    $cartId: ID!
+    $buyerIdentity: CartBuyerIdentityInput!
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
     cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
       cart { ...Cart }
       userErrors { field message }
+      ${CART_WARNINGS}
+    }
+  }
+  ${MONEY}
+  ${IMAGE}
+  ${CART}
+`;
+
+export const CART_DISCOUNT_CODES_UPDATE = `
+  mutation CartDiscountCodesUpdate(
+    $cartId: ID!
+    $discountCodes: [String!]
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
+    cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
+      cart { ...Cart }
+      userErrors { field message }
+      ${CART_WARNINGS}
     }
   }
   ${MONEY}

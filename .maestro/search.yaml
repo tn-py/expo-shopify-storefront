@@ -1,0 +1,28 @@
+# Smoke test: Search tab → type a query → submit → a result opens a PDP.
+# Runs against demo mode (Shopify's mock.shop sample catalog) by default.
+#
+# "snow" matches mock.shop's snowboard-themed sample catalog. If you're
+# running this against a real store, override the query:
+#   maestro test -e APP_ID=<your bundle id> -e SEARCH_QUERY=<term> .maestro/search.yaml
+# See docs/e2e.md.
+appId: ${APP_ID}
+env:
+  # Overridable default: maestro test -e SEARCH_QUERY=<term> ...
+  SEARCH_QUERY: snow
+---
+- launchApp
+- tapOn: "Search"
+- tapOn: "Search products"
+- inputText: ${SEARCH_QUERY}
+- pressKey: Enter
+- assertVisible:
+    text: "Results for.*"
+# The result set is dynamic, so there's no fixed product name to match —
+# open whatever the first result is.
+- tapOn:
+    below: "Results for.*"
+    text: ".+"
+    index: 0
+# A PDP always shows one of these on its sticky action button.
+- assertVisible:
+    text: "Add to cart|Sold out"

@@ -14,9 +14,37 @@ the shortest reproduction path.
 - [ ] `npm test -- --runInBand` completes with zero failing suites.
 - [ ] `npm run typecheck` and `npm run lint` complete with zero errors.
 - [ ] `npm run doctor` reports no actionable dependency/configuration issues.
+- [ ] `npm run check:env` against a filled `.env` reports no errors and successfully
+      pings the Storefront API; against the untouched `.env.example` copy it reports
+      the blank token as an error and exits non-zero.
 - [ ] `npx expo export --platform ios --output-dir /tmp/uhs-export-ios` succeeds.
 - [ ] `npx expo export --platform android --output-dir /tmp/uhs-export-android` succeeds.
+- [ ] `npx expo export --platform android` succeeds with a blank
+      `EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN` / `_STOREFRONT_TOKEN` (demo mode must bundle
+      without throwing at import time).
 - [ ] A fresh iOS install reaches Home, and a fresh Android install reaches Home.
+- [ ] `.maestro/smoke-browse.yaml` and `.maestro/search.yaml` pass against a dev/preview
+      build (`maestro test -e APP_ID=<bundle id> .maestro/` — see
+      [e2e.md](./e2e.md)).
+
+## Demo mode
+
+Run with `.env` unfilled (or `cp .env.example .env`) — the default is demo mode on.
+
+- [ ] With no store configured, Home/Shop/Search/Cart show mock.shop's sample catalog
+      instead of the setup wall.
+- [ ] The "Demo store · Connect yours" pill appears just above the tab bar, doesn't
+      shift any screen's layout, and is reachable by screen reader as a labeled
+      button.
+- [ ] Tapping the pill opens `/setup` as a modal with the step-by-step connection
+      guide; dismissing the pill hides it for the app session, and it's back after a
+      fresh launch.
+- [ ] Setting `EXPO_PUBLIC_DEMO_MODE=off` with nothing configured shows the setup
+      wall instead (no pill, no catalog).
+- [ ] Filling in a real store domain + token shows that store regardless of
+      `EXPO_PUBLIC_DEMO_MODE`, with no demo pill.
+- [ ] See [demo-mode.md](./demo-mode.md) for what's expected to differ (checkout,
+      accounts) while in demo mode — don't file those as bugs.
 
 ## Visual and responsive coverage
 
@@ -54,6 +82,43 @@ in light, dark, and system appearance on each platform.
       Checkout Sheet/network failure shows a retry path and does not clear the cart.
 - [ ] A completed test checkout clears the cart and shows only the non-sensitive
       confirmation fields supplied by Shopify, with accurate guest/member actions.
+- [ ] **Authenticated checkout:** signed in with a customer that has a saved
+      address and a vaulted payment method on the test store, Checkout opens
+      already signed in and offers that saved address/payment method — not a
+      guest checkout. See [customer-accounts.md](./customer-accounts.md#authenticated-checkout).
+- [ ] A valid discount code applies and its allocation is shown on the cart
+      totals; removing it recalculates the total; an invalid/expired code
+      shows a clear error and leaves the cart unchanged.
+- [ ] A cart mutation that returns Shopify `warnings` (e.g. a quantity capped
+      by inventory) surfaces the warning non-blockingly (haptic + message)
+      without failing the operation or clearing the cart.
+- [ ] **Accelerated checkout (iOS only):** with
+      `EXPO_PUBLIC_SHOPIFY_ACCELERATED_CHECKOUT=true` and a fresh dev-client
+      build, a Shop Pay button (and Apple Pay, if
+      `EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID` is set) renders above the regular
+      checkout button on the cart screen on iOS 16+; completing a purchase
+      through it clears the cart and lands on order-confirmed, same as the
+      regular Checkout Sheet. On Android, or with the env var unset, no
+      wallet button renders and the regular checkout button is unaffected.
+      See [accelerated-checkout.md](./accelerated-checkout.md).
+
+## Wishlist, recent searches, and recommendations
+
+- [ ] Tapping the heart on a product card and on the PDP saves/unsaves the
+      item; the two stay in sync for the same product.
+- [ ] The Saved screen lists saved items, refreshes their live
+      price/availability from Shopify, and reflects removals immediately.
+- [ ] The wishlist heart icon and its backdrop are legible in **both** light
+      and dark mode against light and dark product photography (regression
+      check for the dark-mode backdrop fix).
+- [ ] A submitted search adds a recent-search chip; re-opening Search shows
+      recent chips on the idle state, most-recent first, capped and
+      de-duplicated; tapping a chip re-runs that search.
+- [ ] The PDP's recommendations rail shows related products when Shopify
+      returns any, and simply doesn't render when it returns none or errors
+      (non-fatal — doesn't block the rest of the PDP).
+- [ ] The PDP's share action opens the native share sheet with a working
+      product link.
 
 ## Account privacy and authentication
 
@@ -72,6 +137,12 @@ in light, dark, and system appearance on each platform.
       placeholder, pagination page, error, or stale deep-link detail appears.
 - [ ] An expired refresh token removes protected data and returns to Account just
       like explicit sign-out.
+- [ ] **Sign-out clears cart identity:** add an item while signed in as customer
+      A, sign out, then inspect the cart (e.g. via a Storefront API cart query
+      or the Shopify admin) — it must be a **new guest cart** with A's line
+      items but no trace of A's buyer identity (no email/customer token), and
+      the old cart id must no longer be the one persisted on-device. Repeat
+      offline: the local cart is cleared rather than leaking A's identity.
 
 ## Orders and addresses
 

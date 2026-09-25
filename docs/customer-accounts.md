@@ -28,6 +28,57 @@ media/variants, fulfillment tracking, and the cost fields supported by the
 configured API version. Addresses use Shopify's locale-aware `formatted` field,
 paginate safely, and remain view-only.
 
+## Authenticated checkout
+
+Once a customer is signed in, `CartProvider` (`src/shopify/cart.tsx`) associates
+the cart with their identity via `cartBuyerIdentityUpdate`, so the Checkout
+Sheet opens a **logged-in Checkout** — vaulted cards, store credit, and saved
+addresses, the same as on shopify.com:
+
+- The buyer identity sent is `{ customerAccessToken, countryCode }` — a fresh
+  Customer Account API access token (via `useAuth().getAccessToken()`, which
+  refreshes it first if it's near expiry) plus the shopper's market country
+  from `src/shopify/locale.ts`. Guests get `{ countryCode }` only — no email.
+- The synchronization key that decides whether a re-sync is needed includes a
+  short, non-reversible fingerprint of the token (`fingerprintToken` in
+  `src/shopify/cart-operations.ts`), not the raw token, so a rotated token
+  (silent refresh) is detected and re-synced without ever putting the token
+  itself in app state or logs.
+- `useCheckout()` re-runs this sync immediately before presenting the sheet,
+  so checkout is never opened with a stale or expired identity.
+- If Shopify rejects the token (`userErrors` on `cartBuyerIdentityUpdate` —
+  e.g. it expired in the gap between fetching and sending it), the cart falls
+  back to the previous **email-based** identity so checkout still works. This
+  fallback is tracked once as the `checkout_identity_fallback` analytics
+  event and does not retry in a loop for the same token.
+
+## Sign-out privacy
+
+Signing out must not leave a shared device's cart carrying the previous
+customer's identity. `CartProvider` detects the signed-in → guest transition
+and rebuilds a **new guest cart** with the same lines (reusing the same
+cart-creation path as stale-cart recovery), persists its id, and drops the
+old one — guarded by the same snapshot sequencer as every other cart
+mutation, so a concurrent add/update can't resurrect the old cart. If the
+guest cart can't be created (e.g. the device is offline), the local cart is
+cleared instead: privacy wins over keeping the items.
+
+Separately, `AuthProvider.signOut()` (`src/shopify/auth.tsx`) makes a
+**best-effort** call to Shopify's Customer Account API end-session endpoint —
+`${customerAccountApiUrl}/logout?id_token_hint=<idToken>` (mobile clients get
+a `200 OK` rather than a redirect) — with a 5-second timeout. It's
+fire-and-forget: local sign-out (clearing tokens, the customer profile, and
+every cached customer query) always completes immediately regardless of
+whether that call succeeds, fails, or hangs. It's skipped entirely when no id
+token was stored (e.g. the automatic cleanup after a failed silent refresh).
+
+Analytics identify the customer by their stable Shopify **customer GID**
+(`identify(customer.id, { email })` in `src/shopify/auth.tsx`), never by
+email — the email is only ever attached as a PostHog person property. Sentry
+(`setMonitoringUser`) is set to the same GID on profile load and cleared to
+`null` on sign-out. OneSignal's push identity is unchanged (still keyed by
+customer id, falling back to email).
+
 ## Endpoints
 
 Derived from `EXPO_PUBLIC_SHOPIFY_CUSTOMER_ACCOUNT_API_URL`

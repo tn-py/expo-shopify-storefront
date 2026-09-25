@@ -6,6 +6,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+dist-*/
 web-build/
 # expo-env.d.ts is committed on purpose: it carries the `expo/types` reference
 # that types `process.env`, so `tsc` (and CI) works on a fresh checkout without
@@ -39,8 +40,6 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
-
-example
 
 # generated native folders
 /ios

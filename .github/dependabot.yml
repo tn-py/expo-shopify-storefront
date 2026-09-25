@@ -1,0 +1,73 @@
+version: 2
+
+updates:
+  # ─────────────────────────────────────────────────────────────────────────
+  # npm
+  #
+  # Expo-managed native packages (`expo`, `expo-*`, `react`, `react-native`,
+  # `react-native-*`, `@expo/*`, `jest-expo`, `eslint-config-expo`,
+  # `react-native-reanimated`, `react-native-worklets`,
+  # `@react-native-async-storage/async-storage`) are pinned to the versions
+  # that ship together for the current Expo SDK — mixing versions across an
+  # SDK boundary is a common source of native-build/runtime crashes. Major
+  # version bumps for these are IGNORED here on purpose: don't bump them by
+  # hand or via a Dependabot PR. Upgrade the whole SDK together instead:
+  #
+  #   1. Bump `expo` to the new SDK's version in package.json.
+  #   2. Run `npx expo install --fix` to realign every Expo-managed package
+  #      (including the ones ignored below) to that SDK's expected versions.
+  #   3. Run `npx expo-doctor` and `npm run verify`, then do a full native
+  #      rebuild (`eas build`) and smoke-test before merging.
+  #
+  # See https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/.
+  # Everything else (non-Expo-managed deps) is fair game for Dependabot,
+  # grouped into a single weekly PR for minor/patch bumps to keep the volume
+  # of open PRs manageable; majors for those still open individually so they
+  # get a real look.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: expo
+        update-types: [version-update:semver-major]
+      - dependency-name: expo-*
+        update-types: [version-update:semver-major]
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-native
+        update-types: [version-update:semver-major]
+      - dependency-name: react-native-*
+        update-types: [version-update:semver-major]
+      - dependency-name: "@expo/*"
+        update-types: [version-update:semver-major]
+      - dependency-name: jest-expo
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint-config-expo
+        update-types: [version-update:semver-major]
+      - dependency-name: react-native-reanimated
+        update-types: [version-update:semver-major]
+      - dependency-name: react-native-worklets
+        update-types: [version-update:semver-major]
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: [version-update:semver-major]
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # GitHub Actions — monthly, low churn, no grouping needed.
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci

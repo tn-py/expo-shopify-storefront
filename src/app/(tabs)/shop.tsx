@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CollectionCard, getCatalogColumnCount } from '@/components/commerce';
-import { EmptyState, ErrorState, LoadingState } from '@/components/screen-state';
+import { CatalogSkeleton, CollectionCard, getCatalogColumnCount } from '@/components/commerce';
+import { EmptyState, ErrorState } from '@/components/screen-state';
 import { AppSurface, AppText, CatalogGrid } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { screen } from '@/lib/analytics';
@@ -17,7 +17,7 @@ export default function ShopScreen() {
 
   useEffect(() => screen('Shop'), []);
 
-  if (isPending) return <LoadingState label="Loading collections…" />;
+  if (isPending) return <CatalogSkeleton label="Loading collections" />;
   if (isError) return <ErrorState message={(error as Error).message} onRetry={refetch} />;
   if (!data?.length) {
     return <EmptyState title="No collections yet" subtitle="Please check back soon." />;

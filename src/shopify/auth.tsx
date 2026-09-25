@@ -16,6 +16,7 @@ import {
 } from 'react';
 
 import { identify, resetAnalytics, track } from '@/lib/analytics';
+import { setMonitoringUser } from '@/lib/monitoring';
 import { identifyPushUser, resetPushUser } from '@/notifications/onesignal';
 import { clearCustomerQueries } from './customer-session';
 import { ShopifyEnv, isCustomerAccountConfigured } from './env';
@@ -103,6 +104,29 @@ function toStored(r: AuthSession.TokenResponse): StoredTokens {
 
 const PROFILE_QUERY = `query { customer { id firstName lastName emailAddress { emailAddress } } }`;
 
+/**
+ * Best-effort call to Shopify's Customer Account API end-session endpoint —
+ * mobile clients get a 200 OK rather than a redirect. Never awaited by the
+ * caller: local sign-out always completes regardless of the outcome here.
+ */
+async function endShopifySession(idToken: string): Promise<void> {
+  if (!ShopifyEnv.customerAccountApiUrl) return;
+  const url = `${ShopifyEnv.customerAccountApiUrl}/logout?id_token_hint=${encodeURIComponent(idToken)}`;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      fetch(url),
+      new Promise((_resolve, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('logout timed out')), 5000);
+      }),
+    ]);
+  } catch {
+    // Best-effort only — local tokens are already cleared either way.
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [tokens, setTokens] = useState<StoredTokens | null>(null);
@@ -131,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearCustomerSession = useCallback(async (): Promise<void> => {
+    const idToken = tokensRef.current?.idToken ?? null;
     await AsyncStorage.setItem(SIGNED_OUT_TOMBSTONE_KEY, '1');
     tokensRef.current = null;
     let tokenDeletionError: unknown;
@@ -149,7 +174,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCustomerProfileError(null);
     resetAnalytics();
     resetPushUser();
+    setMonitoringUser(null);
     router.replace('/account');
+    // Fire-and-forget: never lets a slow/failed remote logout block or fail
+    // local sign-out, which has already completed above.
+    if (idToken) void endShopifySession(idToken);
     if (tokenDeletionError) throw tokenDeletionError;
   }, [queryClient]);
 
@@ -207,8 +236,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       setCustomer(nextCustomer);
       setCustomerProfileStatus('ready');
-      if (nextCustomer.emailAddress) {
-        identify(nextCustomer.emailAddress, { email: nextCustomer.emailAddress });
+      if (nextCustomer.id) {
+        // Identify by the stable Shopify customer GID, never the email — the
+        // email is only ever sent along as a person property.
+        identify(
+          nextCustomer.id,
+          nextCustomer.emailAddress ? { email: nextCustomer.emailAddress } : undefined,
+        );
+        setMonitoringUser(nextCustomer.id);
       }
       if (nextCustomer.id ?? nextCustomer.emailAddress) {
         identifyPushUser(

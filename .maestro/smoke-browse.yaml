@@ -1,0 +1,38 @@
+# Smoke test: launch → browse a collection → open a product → add to cart →
+# checkout button is present. Runs against demo mode (Shopify's mock.shop
+# sample catalog) by default — no store configuration needed.
+#
+# Usage: maestro test -e APP_ID=<your bundle id> .maestro/smoke-browse.yaml
+# See docs/e2e.md.
+appId: ${APP_ID}
+---
+- launchApp
+- assertVisible: "Home"
+
+# --- Shop tab: open the first collection ---
+- tapOn: "Shop"
+- assertVisible: "Explore every collection in the catalog."
+# The catalog is dynamic (mock.shop sample data), so there's no fixed
+# collection name to match — take the first tappable item below the header.
+- tapOn:
+    below: "Explore every collection in the catalog."
+    text: ".+"
+    index: 0
+
+# --- Collection: open the first product ---
+- assertVisible: "Sort by"
+- tapOn:
+    below: "Sort by"
+    text: ".+"
+    index: 0
+
+# --- Product detail: add to cart ---
+- assertVisible: "Add to cart"
+- tapOn: "Add to cart"
+- assertVisible:
+    text: ".*added to your cart.*"
+
+# --- Cart: checkout button is present ---
+- tapOn: "Cart"
+- assertVisible:
+    text: "Checkout ·.*"

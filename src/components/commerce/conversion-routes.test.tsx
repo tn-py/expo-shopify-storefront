@@ -21,6 +21,10 @@ jest.mock('@/shopify/auth', () => ({
 }));
 jest.mock('@/shopify/cart', () => ({ useCart: jest.fn() }));
 jest.mock('@/shopify/checkout', () => ({ useCheckout: jest.fn() }));
+// The real accelerated-checkout component pulls in the native
+// @shopify/checkout-sheet-kit module, which isn't safe to load unmocked in a
+// unit test; it has its own dedicated test suite.
+jest.mock('@/components/commerce', () => ({ WalletCheckoutButtons: () => null }));
 
 const cartModule = jest.requireMock('@/shopify/cart') as { useCart: jest.Mock };
 const checkoutModule = jest.requireMock('@/shopify/checkout') as { useCheckout: jest.Mock };
@@ -29,12 +33,15 @@ const cart: Cart = {
   id: 'cart-1',
   checkoutUrl: 'https://shop.example/checkouts/1',
   totalQuantity: 1,
-  cost: { subtotalAmount: money, totalAmount: money, totalTaxAmount: null },
+  discountCodes: [],
+  discountAllocations: [],
+  cost: { subtotalAmount: money, totalAmount: money },
   lines: {
     nodes: [{
       id: 'line-1',
       quantity: 1,
       cost: { totalAmount: money, amountPerQuantity: money },
+      discountAllocations: [],
       merchandise: {
         id: 'variant-1',
         title: 'Default Title',
@@ -55,9 +62,13 @@ describe('cart conversion states', () => {
       busy: false,
       operations: {},
       lastRemovedLine: null,
+      warnings: [],
+      dismissWarnings: jest.fn(),
       updateLine: jest.fn(),
       removeLine: jest.fn(),
       undoRemove: jest.fn(),
+      applyDiscountCode: jest.fn(),
+      removeDiscountCode: jest.fn(),
       clearOperationError: jest.fn(),
       buyerIdentityError: null,
       buyerIdentityErrorKind: null,
@@ -76,7 +87,7 @@ describe('cart conversion states', () => {
     const { getAllByText, getByText } = await render(<CartScreen />);
 
     expect(getAllByText('Estimated total')).toHaveLength(2);
-    expect(getByText(/taxes, shipping, and discounts are finalized in Shopify Checkout/i)).toBeOnTheScreen();
+    expect(getByText(/taxes and shipping calculated at checkout/i)).toBeOnTheScreen();
   });
 
   it('offers undo after a successful removal', async () => {
@@ -115,6 +126,74 @@ describe('cart conversion states', () => {
 
     expect(getByLabelText('Quantity 4')).toBeOnTheScreen();
     expect((updateLine.mock.calls as unknown as [string, number][]).map((call) => call[1])).toEqual([2, 3, 4]);
+  });
+
+  it('applies a discount code from the text field', async () => {
+    const applyDiscountCode = jest.fn().mockResolvedValue(undefined);
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      applyDiscountCode,
+    });
+    const { getByLabelText, getByRole } = await render(<CartScreen />);
+
+    await fireEvent.changeText(getByLabelText('Discount code'), 'welcome10');
+    await fireEvent.press(getByRole('button', { name: 'Apply' }));
+
+    expect(applyDiscountCode).toHaveBeenCalledWith('welcome10');
+  });
+
+  it('shows applied discount codes as removable chips and lets the shopper remove one', async () => {
+    const removeDiscountCode = jest.fn().mockResolvedValue(undefined);
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      cart: { ...cart, discountCodes: [{ code: 'WELCOME10', applicable: true }] },
+      removeDiscountCode,
+    });
+    const { getByLabelText, getByText } = await render(<CartScreen />);
+
+    expect(getByText('WELCOME10')).toBeOnTheScreen();
+    await fireEvent.press(getByLabelText('Remove discount code WELCOME10'));
+
+    expect(removeDiscountCode).toHaveBeenCalledWith('WELCOME10');
+  });
+
+  it('shows an inline message when Shopify marks an applied code as not applicable', async () => {
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      cart: { ...cart, discountCodes: [{ code: 'SUMMER', applicable: false }] },
+    });
+    const { getByText } = await render(<CartScreen />);
+
+    expect(getByText('SUMMER')).toBeOnTheScreen();
+    expect(getByText(/doesn’t currently apply/i)).toBeOnTheScreen();
+  });
+
+  it('shows a discount savings row in the order summary when the cart has one', async () => {
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      cart: {
+        ...cart,
+        discountAllocations: [{ discountedAmount: { amount: '5.00', currencyCode: 'USD' }, code: 'WELCOME10' }],
+      },
+    });
+    const { getByText } = await render(<CartScreen />);
+
+    expect(getByText('Discount')).toBeOnTheScreen();
+    expect(getByText('−$5.00')).toBeOnTheScreen();
+  });
+
+  it('surfaces a non-blocking cart warning and lets the shopper dismiss it', async () => {
+    const dismissWarnings = jest.fn();
+    cartModule.useCart.mockReturnValue({
+      ...cartModule.useCart(),
+      warnings: [{ code: 'LINE_QUANTITY_ADJUSTED', message: 'We adjusted a quantity for stock.', target: 'line-1' }],
+      dismissWarnings,
+    });
+    const { getByText, getByRole } = await render(<CartScreen />);
+
+    expect(getByText('We adjusted a quantity for stock.')).toBeOnTheScreen();
+    await fireEvent.press(getByRole('button', { name: 'Dismiss' }));
+    expect(dismissWarnings).toHaveBeenCalledTimes(1);
   });
 
   it('shows actionable retry feedback when the customer profile cannot load', async () => {

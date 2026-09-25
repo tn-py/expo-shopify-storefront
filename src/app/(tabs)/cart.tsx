@@ -3,22 +3,26 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { WalletCheckoutButtons } from '@/components/commerce';
 import {
   AppButton,
   AppSurface,
   AppText,
+  AppTextField,
   Price,
   QuantityStepper,
   RemoteImage,
   StateView,
+  StatusBadge,
   StickyActionBar,
 } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { hapticSuccess } from '@/lib/haptics';
 import { formatMoney } from '@/lib/format';
 import { useCart } from '@/shopify/cart';
-import type { CartOperationStatus } from '@/shopify/cart-operations';
+import { cartDiscountTotal, type CartOperationStatus } from '@/shopify/cart-operations';
 import { useCheckout } from '@/shopify/checkout';
-import type { CartLine } from '@/shopify/types';
+import type { Cart, CartLine, CartWarning } from '@/shopify/types';
 
 type RetryRequest =
   | { kind: 'update'; quantity: number }
@@ -32,9 +36,13 @@ export default function CartScreen() {
     ready,
     operations,
     lastRemovedLine,
+    warnings,
+    dismissWarnings,
     updateLine,
     removeLine,
     undoRemove,
+    applyDiscountCode,
+    removeDiscountCode,
     clearOperationError,
     buyerIdentityError,
     buyerIdentityErrorKind,
@@ -83,6 +91,8 @@ export default function CartScreen() {
     );
   }
 
+  const discountTotal = cartDiscountTotal(cart);
+
   const runRequest = async (line: CartLine, request: RetryRequest) => {
     const key = `line:${line.id}`;
     clearOperationError(key);
@@ -118,6 +128,8 @@ export default function CartScreen() {
           onUndo={undo}
         />
 
+        <WarningsBanner warnings={warnings} onDismiss={dismissWarnings} />
+
         <View style={styles.lines}>
           {cart.lines.nodes.map((line) => (
             <CartLineRow
@@ -130,11 +142,23 @@ export default function CartScreen() {
           ))}
         </View>
 
+        <DiscountSection
+          cart={cart}
+          pending={operations.discount?.pending}
+          error={operations.discount?.error}
+          onClearError={() => clearOperationError('discount')}
+          onApply={applyDiscountCode}
+          onRemove={removeDiscountCode}
+        />
+
         <AppSurface variant="muted" style={styles.summary}>
           <SummaryRow label="Subtotal" value={formatMoney(cart.cost.subtotalAmount)} />
+          {discountTotal ? (
+            <SummaryRow label="Discount" value={`−${formatMoney(discountTotal)}`} tone="sale" />
+          ) : null}
           <SummaryRow label="Estimated total" value={formatMoney(cart.cost.totalAmount)} strong />
           <AppText variant="caption" tone="textSecondary">
-            Taxes, shipping, and discounts are finalized in Shopify Checkout.
+            Taxes and shipping calculated at checkout.
           </AppText>
         </AppSurface>
 
@@ -142,7 +166,7 @@ export default function CartScreen() {
           <AppText variant="labelStrong">Checkout you can trust</AppText>
           <AppText tone="textSecondary">
             Payment is completed securely in Shopify Checkout. You can review delivery,
-            returns, discounts, and the final total before placing your order.
+            returns, and the final total before placing your order.
           </AppText>
         </View>
 
@@ -172,6 +196,9 @@ export default function CartScreen() {
       </ScrollView>
 
       <StickyActionBar style={{ paddingBottom: insets.bottom + Spacing.two }}>
+        <View style={styles.stickyWallet}>
+          <WalletCheckoutButtons cartId={cart.id} />
+        </View>
         <View style={styles.stickyContent}>
           <View style={styles.stickyTotal}>
             <AppText variant="caption" tone="textSecondary">Estimated total</AppText>
@@ -229,6 +256,124 @@ function RemovalFeedback({
         </AppSurface>
       ) : null}
     </View>
+  );
+}
+
+/** Non-blocking cart warnings from Shopify (e.g. a quantity adjusted for stock). */
+function WarningsBanner({
+  warnings,
+  onDismiss,
+}: {
+  warnings: CartWarning[];
+  onDismiss: () => void;
+}) {
+  if (!warnings.length) return null;
+  return (
+    <AppSurface accessibilityRole="alert" variant="muted" style={styles.warningsBox}>
+      {warnings.map((warning, index) => (
+        <AppText key={`${warning.code}:${warning.target}:${index}`} variant="caption">
+          {warning.message}
+        </AppText>
+      ))}
+      <AppButton label="Dismiss" variant="tertiary" onPress={onDismiss} />
+    </AppSurface>
+  );
+}
+
+function DiscountSection({
+  cart,
+  pending,
+  error,
+  onClearError,
+  onApply,
+  onRemove,
+}: {
+  cart: Cart;
+  pending?: boolean;
+  error?: string | null;
+  onClearError: () => void;
+  onApply: (code: string) => Promise<void>;
+  onRemove: (code: string) => Promise<void>;
+}) {
+  const [code, setCode] = useState('');
+  const [removingCode, setRemovingCode] = useState<string | null>(null);
+
+  const submit = async () => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    onClearError();
+    try {
+      await onApply(trimmed);
+      setCode('');
+      hapticSuccess();
+    } catch {
+      // The operation error surfaces below the field.
+    }
+  };
+
+  const remove = async (discountCode: string) => {
+    onClearError();
+    setRemovingCode(discountCode);
+    try {
+      await onRemove(discountCode);
+    } catch {
+      // The operation error surfaces below the field.
+    } finally {
+      setRemovingCode(null);
+    }
+  };
+
+  return (
+    <AppSurface variant="muted" style={styles.discountSection}>
+      <AppText variant="labelStrong">Discount code</AppText>
+      <View style={styles.discountRow}>
+        <View style={styles.discountField}>
+          <AppTextField
+            placeholder="Enter code"
+            accessibilityLabel="Discount code"
+            value={code}
+            onChangeText={setCode}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!pending}
+            returnKeyType="done"
+            onSubmitEditing={() => { void submit(); }}
+          />
+        </View>
+        <AppButton
+          label="Apply"
+          variant="secondary"
+          loading={pending && !removingCode}
+          disabled={!code.trim()}
+          onPress={() => { void submit(); }}
+        />
+      </View>
+      {error ? <AppText variant="caption" tone="sale">{error}</AppText> : null}
+      {cart.discountCodes.length ? (
+        <View style={styles.discountChips}>
+          {cart.discountCodes.map((entry) => (
+            <View key={entry.code} style={styles.discountChip}>
+              <View style={styles.discountChipRow}>
+                <StatusBadge label={entry.code} tone={entry.applicable ? 'success' : 'warning'} />
+                <AppButton
+                  label="Remove"
+                  accessibilityLabel={`Remove discount code ${entry.code}`}
+                  variant="tertiary"
+                  loading={pending && removingCode === entry.code}
+                  disabled={pending && removingCode !== entry.code}
+                  onPress={() => { void remove(entry.code); }}
+                />
+              </View>
+              {!entry.applicable ? (
+                <AppText variant="caption" tone="textSecondary">
+                  This code doesn’t currently apply to your cart.
+                </AppText>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </AppSurface>
   );
 }
 
@@ -307,11 +452,21 @@ function CartLineRow({
   );
 }
 
-function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+function SummaryRow({
+  label,
+  value,
+  strong = false,
+  tone,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  tone?: 'sale';
+}) {
   return (
     <View style={styles.summaryRow}>
-      <AppText variant={strong ? 'labelStrong' : 'label'}>{label}</AppText>
-      <AppText variant={strong ? 'price' : 'label'}>{value}</AppText>
+      <AppText variant={strong ? 'labelStrong' : 'label'} tone={tone}>{label}</AppText>
+      <AppText variant={strong ? 'price' : 'label'} tone={tone}>{value}</AppText>
     </View>
   );
 }
@@ -343,6 +498,19 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.three },
   reassurance: { gap: Spacing.two },
   errorBox: { gap: Spacing.two, padding: Spacing.three },
+  warningsBox: { gap: Spacing.two, padding: Spacing.three },
+  discountSection: { gap: Spacing.two, padding: Spacing.three },
+  discountRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
+  discountField: { flex: 1 },
+  discountChips: { gap: Spacing.two },
+  discountChip: { gap: Spacing.one },
+  discountChipRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  stickyWallet: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    marginBottom: Spacing.two,
+  },
   stickyContent: { width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   stickyTotal: { flex: 0.85 },
   checkoutAction: { flex: 1.4 },
