@@ -1,17 +1,13 @@
-const { getDefaultConfig } = require('expo/metro-config');
 const { wrapWithReanimatedMetroConfig } = require('react-native-reanimated/metro-config');
+const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 const { withUniwindConfig } = require('uniwind/metro');
-// `getSentryExpoConfig` replaces the `getDefaultConfig` call outright, which
-// doesn't compose with the reanimated/uniwind wrapper chain below. `withSentryConfig`
-// is the composable equivalent (debug IDs + source-map metadata); it's a no-op
-// at runtime when EXPO_PUBLIC_SENTRY_DSN is blank.
-const { withSentryConfig } = require('@sentry/react-native/metro');
 
-const config = getDefaultConfig(__dirname);
+// `getSentryExpoConfig` is Expo's `getDefaultConfig` plus Sentry's serializer
+// (debug IDs for source maps). It's harmless when EXPO_PUBLIC_SENTRY_DSN is
+// blank; the reanimated/uniwind wrappers compose on top as before.
+const config = getSentryExpoConfig(__dirname);
 
-module.exports = withSentryConfig(
-  withUniwindConfig(wrapWithReanimatedMetroConfig(config), {
-    cssEntryFile: './global.css',
-    dtsFile: './src/uniwind.d.ts',
-  }),
-);
+module.exports = withUniwindConfig(wrapWithReanimatedMetroConfig(config), {
+  cssEntryFile: './global.css',
+  dtsFile: './src/uniwind.d.ts',
+});
